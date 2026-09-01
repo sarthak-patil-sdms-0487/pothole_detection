@@ -8,7 +8,7 @@ const LandingPage = () => {
   const { role } = useAuthStore();
 
   // If the user is viewing as an engineer, show the dashboard instead of the citizen landing page
-  if (role === 'engineer') {
+  if (role === 'ENGINEER') {
     return <Dashboard />;
   }
 

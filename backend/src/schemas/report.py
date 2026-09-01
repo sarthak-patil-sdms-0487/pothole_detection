@@ -1,8 +1,7 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, JSON
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String, Float, DateTime, JSON, ForeignKey
+from sqlalchemy.orm import relationship
 import datetime
-
-Base = declarative_base()
+from .base import Base
 
 class Report(Base):
     __tablename__ = "reports"
@@ -29,3 +28,12 @@ class Report(Base):
     
     # Consolidated fields
     estSize = Column(String, nullable=True)
+
+    # Staged-notice lifecycle & attribution extensions
+    defect_id = Column(Integer, ForeignKey("defect.id"), nullable=True)
+    segment_id = Column(Integer, ForeignKey("road_segment.id"), nullable=True)
+    capture_source = Column(String, nullable=True)  # WORKER | SURVEY | OPPORTUNISTIC
+
+    # Relationships
+    defect = relationship("Defect", backref="reports")
+    segment = relationship("RoadSegment", backref="reports")

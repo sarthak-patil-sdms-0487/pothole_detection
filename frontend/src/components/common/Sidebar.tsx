@@ -7,9 +7,10 @@ import {
   Map, 
   BarChart2, 
   Settings, 
-  Info,
-  X,
-  FileCheck2
+  Info, 
+  X, 
+  FileCheck2, 
+  Crosshair 
 } from 'lucide-react';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -22,6 +23,7 @@ const Sidebar = ({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => vo
   // Define navigation based on role
   const citizenNav = [
     { name: 'Home', href: '/', icon: Home },
+    { name: 'Drive Mode (Autonomous)', href: '/drive', icon: Crosshair },
     { name: 'Report Pothole', href: '/report', icon: AlertCircle },
     { name: 'My Reports', href: '/reports', icon: List },
     { name: 'Map View', href: '/map', icon: Map },
@@ -30,6 +32,7 @@ const Sidebar = ({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => vo
 
   const engineerNav = [
     { name: 'Overview', href: '/', icon: LayoutDashboard },
+    { name: 'Drive Mode (Survey)', href: '/drive', icon: Crosshair },
     { name: 'Review Reports', href: '/review', icon: FileCheck2 },
     { name: 'Work Orders', href: '/reports', icon: List },
     { name: 'Map View', href: '/map', icon: Map },
@@ -37,7 +40,7 @@ const Sidebar = ({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => vo
     { name: 'Admin', href: '/admin', icon: Settings },
   ];
 
-  const navigation = role === 'engineer' ? engineerNav : citizenNav;
+  const navigation = role === 'ENGINEER' ? engineerNav : citizenNav;
 
   return (
     <>
@@ -72,9 +75,9 @@ const Sidebar = ({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => vo
         <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 shrink-0">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Current Profile</p>
           <div className="flex items-center gap-2">
-            <div className={clsx("w-2 h-2 rounded-full", role === 'engineer' ? "bg-accent-orange" : "bg-govBlue")}></div>
+            <div className={clsx("w-2 h-2 rounded-full", role === 'ENGINEER' ? "bg-accent-orange" : "bg-govBlue")}></div>
             <p className="text-sm font-medium text-gray-900 dark:text-white capitalize">
-              {role === 'engineer' ? 'PWD Engineer' : 'Citizen'}
+              {role === 'ENGINEER' ? 'PWD Engineer' : 'Surveyor / Citizen'}
             </p>
           </div>
         </div>

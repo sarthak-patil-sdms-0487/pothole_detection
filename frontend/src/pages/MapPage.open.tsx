@@ -1,12 +1,13 @@
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LocateFixed, User, Wrench, Filter, Loader, AlertTriangle } from 'lucide-react';
+import { Filter, Loader, AlertTriangle, Clock, ShieldCheck, MapPin, ExternalLink } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { API_BASE_URL } from '../config';
+import { useAuthStore } from '../store/authStore';
 
-// Fix for default icon issue with webpack
+// Fix Leaflet icons
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
@@ -14,167 +15,210 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
 });
 
-type Role = 'user' | 'engineer';
-type ReportStatus = 'Reported' | 'In Progress' | 'Fixed' | 'All';
+interface Defect {
+  id: number;
+  segment_id?: number;
+  segment_name?: string;
+  state: 'SIGHTING' | 'CONFIRMED' | 'NOTICED' | 'CLOSED';
+  sla_hours_remaining?: number;
+  breach_flag: boolean;
+  repeat_sighting_count: number;
+  latest_verdict?: {
+    verdict: string;
+  };
+  sightings: {
+    lat?: number;
+    lng?: number;
+    original_image_url: string;
+  }[];
+}
+
+const blueIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+const violetIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-violet.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+const orangeIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+const redIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+const greenIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
 
 const MapPage = () => {
-  const [mapCenter, setMapCenter] = useState<L.LatLngExpression>([18.5204, 73.8567]);
-  const [userRole, setUserRole] = useState<Role>('engineer');
-  const [activeReport, setActiveReport] = useState<any | null>(null);
-  const [filter, setFilter] = useState<ReportStatus>('All');
-  const [reports, setReports] = useState([]);
+  const { role } = useAuthStore();
+  const [mapCenter] = useState<L.LatLngExpression>([18.755, 73.785]); // Centered on MIDC Chakan Phase II
+  const [filter, setFilter] = useState<string>('ALL');
+  const [defects, setDefects] = useState<Defect[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchReports = async () => {
+    const fetchDefects = async () => {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`${API_BASE_URL}/api/reports`, {
-          headers: {
-            'ngrok-skip-browser-warning': 'true'
-          }
+        const res = await fetch(`${API_BASE_URL}/api/defects`, {
+          headers: { 'X-Role': role }
         });
-        if (!response.ok) {
-          throw new Error('Failed to fetch data');
-        }
-        const data = await response.json();
-        setReports(data.filter(report => report.lat && report.lng));
-      } catch (e) {
-        console.error('Error fetching reports:', e);
-        setError('Could not load report data. Please ensure the backend is running.');
+        if (!res.ok) throw new Error('Failed to fetch defect spatial data');
+        const data: Defect[] = await res.json();
+        setDefects(data.filter(d => d.sightings.length > 0 && d.sightings[0].lat && d.sightings[0].lng));
+      } catch (e: any) {
+        setError(e.message);
       } finally {
         setLoading(false);
       }
     };
+    fetchDefects();
+  }, [role]);
 
-    fetchReports();
-  }, []);
+const greyIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-grey.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
 
-  const handleReportClick = (report: any) => {
-    setActiveReport(report);
-  };
+const getDefectIcon = (d: Defect) => {
+  if (d.state === 'CLOSED') return greenIcon;
+  if (d.state === 'NOTICED') return redIcon;
+  if (d.state === 'CONFIRMED') return orangeIcon;
+  return greyIcon; // SIGHTING
+};
 
-  const handleViewMore = (reportId: string) => {
-    navigate(`/reports/${reportId}`);
-  };
-
-  const redIcon = new L.Icon({
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41]
-  });
-
-  const yellowIcon = new L.Icon({
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-yellow.png',
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41]
-  });
-
-  const greenIcon = new L.Icon({
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41]
-  });
-
-  const getIcon = (status: string) => {
-    switch (status) {
-      case 'Reported': return redIcon;
-      case 'In Progress': return yellowIcon;
-      case 'Fixed': return greenIcon;
-      default: return new L.Icon.Default();
-    }
-  }
-
-  const filteredReports = reports.filter(report => {
-    if (filter === 'All') return true;
-    return report.status === filter;
-  });
+  const filteredDefects = defects.filter(d => filter === 'ALL' || d.state === filter);
 
   return (
-    <div className="relative h-full w-full">
-      {userRole === 'engineer' && (
-        <div className="absolute top-4 left-4 z-[1000] bg-white p-2 rounded-lg shadow-lg flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Filter className="w-5 h-5 text-gray-600" />
-            <select value={filter} onChange={(e) => setFilter(e.target.value as ReportStatus)} className="bg-white border border-gray-300 rounded-md text-sm">
-              <option value="All">All</option>
-              <option value="Reported">Reported</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Fixed">Fixed</option>
-            </select>
-          </div>
-          {loading && <Loader className="w-5 h-5 animate-spin text-gray-500" />}
-          {error && <AlertTriangle className="w-5 h-5 text-red-500" title={error} />}
+    <div className="relative h-full w-full rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm">
+      {/* Top Filter Floating Card */}
+      <div className="absolute top-4 left-4 z-[1000] bg-white/90 dark:bg-gray-800/90 backdrop-blur-md p-3 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-govBlue" />
+          <select 
+            value={filter} 
+            onChange={(e) => setFilter(e.target.value)} 
+            className="bg-transparent font-bold text-xs border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-govBlue"
+          >
+            <option value="ALL">All Defects ({defects.length})</option>
+            <option value="SIGHTING">Sighting (Blue)</option>
+            <option value="CONFIRMED">Confirmed (Purple)</option>
+            <option value="NOTICED">Noticed - 48h SLA (Orange/Red)</option>
+            <option value="CLOSED">Closed (Green)</option>
+          </select>
         </div>
-      )}
+        {loading && <Loader className="w-4 h-4 animate-spin text-govBlue" />}
+        {error && <AlertTriangle className="w-4 h-4 text-red-500" title={error} />}
+      </div>
 
-      <MapContainer center={mapCenter} zoom={12} className="h-full w-full z-0" zoomControl={false}>
+      <MapContainer center={mapCenter} zoom={14} className="h-full w-full z-0" zoomControl={false}>
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution=""
+          attribution="&copy; OpenStreetMap contributors | MIDC Chakan GIS"
         />
 
-        {userRole === 'engineer' &&
-          filteredReports.map((report) => (
+        {filteredDefects.map((d) => {
+          const pos = d.sightings[0];
+          if (!pos.lat || !pos.lng) return null;
+          return (
             <Marker
-              key={report.id}
-              position={[report.lat, report.lng]}
-              icon={getIcon(report.status)}
-              eventHandlers={{
-                click: () => {
-                  handleReportClick(report);
-                },
-              }}
+              key={d.id}
+              position={[pos.lat, pos.lng]}
+              icon={getDefectIcon(d)}
             >
-              {activeReport && activeReport.id === report.id && (
-                <Popup>
-                  <div className="p-2">
-                    <img src={`${activeReport.original_image_url}?t=${new Date().getTime()}`} alt="Pothole" className="w-48 h-auto rounded-lg mb-2" />
-                    <h3 className="font-bold">{activeReport.address}</h3>
-                    <p>Status: {activeReport.status}</p>
-                    <p>Severity: {activeReport.severity}</p>
-                    <button
-                      onClick={() => handleViewMore(activeReport.id)}
-                      className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 rounded mt-2 text-sm"
-                    >
-                      View More
-                    </button>
+              <Popup>
+                <div className="p-1 max-w-[220px] space-y-2 text-xs">
+                  {pos.original_image_url && (
+                    <img src={pos.original_image_url} alt="Pothole" className="w-full h-24 object-cover rounded-lg" />
+                  )}
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold font-mono text-govBlue">Defect #{d.id}</span>
+                      <span className="font-bold text-[10px] px-1.5 py-0.5 rounded bg-gray-100 uppercase">{d.state}</span>
+                    </div>
+                    <p className="font-semibold text-gray-800 text-[11px] truncate mt-0.5">{d.segment_name || `Segment #${d.segment_id}`}</p>
+                    <p className="text-gray-500 text-[10px]">Warranty: {d.latest_verdict?.verdict || 'Unassigned'}</p>
+                    {d.state === 'NOTICED' && (
+                      <p className="text-amber-600 font-bold text-[10px] flex items-center gap-1 mt-0.5">
+                        <Clock className="w-3 h-3" /> {d.breach_flag ? 'SLA Breached' : `${d.sla_hours_remaining}h SLA left`}
+                      </p>
+                    )}
                   </div>
-                </Popup>
-              )}
+                  <button
+                    onClick={() => navigate('/review')}
+                    className="w-full bg-govBlue hover:bg-blue-700 text-white font-bold py-1.5 rounded-lg text-xs flex items-center justify-center gap-1"
+                  >
+                    Inspect in Review <ExternalLink className="w-3 h-3" />
+                  </button>
+                </div>
+              </Popup>
             </Marker>
-          ))}
+          );
+        })}
       </MapContainer>
 
-      {userRole === 'engineer' && (
-        <div className="absolute bottom-4 right-4 z-[1000] bg-white p-2 rounded-lg shadow-lg">
-          <h3 className="font-bold mb-2">Legend</h3>
+      {/* Floating Legend */}
+      <div className="absolute bottom-4 right-4 z-[1000] bg-white/95 dark:bg-gray-800/95 backdrop-blur-md p-3.5 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 text-[11px] space-y-2">
+        <p className="font-extrabold text-gray-900 dark:text-white uppercase tracking-wider text-[10px]">Defect Lifecycle Pins</p>
+        <div className="space-y-1.5 font-medium text-gray-700 dark:text-gray-300">
           <div className="flex items-center gap-2">
-            <img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png" alt="Reported" className="w-4 h-6" />
-            <span>Reported</span>
+            <span className="w-3 h-3 rounded-full bg-blue-500 inline-block" />
+            <span>SIGHTING (Intake)</span>
           </div>
           <div className="flex items-center gap-2">
-            <img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-yellow.png" alt="In Progress" className="w-4 h-6" />
-            <span>In Progress</span>
+            <span className="w-3 h-3 rounded-full bg-purple-500 inline-block" />
+            <span>CONFIRMED (Cluster)</span>
           </div>
           <div className="flex items-center gap-2">
-            <img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png" alt="Fixed" className="w-4 h-6" />
-            <span>Fixed</span>
+            <span className="w-3 h-3 rounded-full bg-amber-500 inline-block" />
+            <span>NOTICED (48h Clock)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-red-500 inline-block animate-pulse" />
+            <span>SLA BREACHED</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
+            <span>CLOSED (Certified)</span>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

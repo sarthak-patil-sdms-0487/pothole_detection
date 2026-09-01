@@ -1,0 +1,47 @@
+[
+  {
+    "sample_id": "TENDER_SAMPLE_01",
+    "document_name": "MIDC_Chakan_Spine_Road_SCC.pdf",
+    "extraction_method": "Gemini Document Understanding Pipeline",
+    "tender_ref": "MIDC/EE/PUNE/2024/TR-01",
+    "contractor_name": "B.G. Shirke Construction Technology Pvt Ltd",
+    "work_title": "Asphalt concrete resurfacing & strengthening of Spine Road North, Chakan Phase-2.",
+    "dlp_years": 3.0,
+    "dlp_months": 36,
+    "warranty_start_basis": "Certified Date of Final / Substantial Physical Completion",
+    "extracted_clause_reference": "CLAUSE 35.1 - DEFECT LIABILITY AND MAINTENANCE GUARANTEE:",
+    "extracted_clause_verbatim": "of 3 (three) consecutive years (36 calendar months) calculated strictly from the date of issue of the",
+    "sla_mandate_hours": 48,
+    "legal_hedge_note": "Probable contractor/tender match based on road-segment mapping \u2014 to be verified against tender documents before any legal action."
+  },
+  {
+    "sample_id": "TENDER_SAMPLE_02",
+    "document_name": "PWD_Maharashtra_Heavy_Corridor_PQC.pdf",
+    "extraction_method": "Gemini Document Understanding Pipeline",
+    "tender_ref": "MAHA/PWD/PUNE/2023/W-108",
+    "contractor_name": "Ashoka Buildcon Ltd",
+    "work_title": "Construction of Pavement Quality Concrete (PQC) 4-lane carriage on Heavy Vehicle Sector 1 & 2.",
+    "dlp_years": 5.0,
+    "dlp_months": 60,
+    "warranty_start_basis": "Certified Date of Final / Substantial Physical Completion",
+    "extracted_clause_reference": "ITEM 42.4 (SPECIAL CLAUSES - RIGID PAVEMENT):",
+    "extracted_clause_verbatim": "5 (five) years from the certified date of substantial completion. The contractor shall maintain the riding quality",
+    "sla_mandate_hours": 48,
+    "legal_hedge_note": "Probable contractor/tender match based on road-segment mapping \u2014 to be verified against tender documents before any legal action."
+  },
+  {
+    "sample_id": "TENDER_SAMPLE_03",
+    "document_name": "MIDC_Container_Terminal_FIDIC_EPC.pdf",
+    "extraction_method": "Gemini Document Understanding Pipeline",
+    "tender_ref": "MIDC/EE/CHAKAN/2024/CT-04",
+    "contractor_name": "KNR Constructions Ltd",
+    "work_title": "Road Resurfacing",
+    "dlp_years": 5.0,
+    "dlp_months": 60,
+    "warranty_start_basis": "Certified Date of Final / Substantial Physical Completion",
+    "extracted_clause_reference": "SECTION 11 - DEFECTS NOTIFICATION PERIOD (DNP / DLP):",
+    "extracted_clause_verbatim": "certified on the Taking-Over Certificate.",
+    "sla_mandate_hours": 48,
+    "legal_hedge_note": "Probable contractor/tender match based on road-segment mapping \u2014 to be verified against tender documents before any legal action."
+  }
+]

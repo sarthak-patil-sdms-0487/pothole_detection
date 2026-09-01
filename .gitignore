@@ -1,4 +1,38 @@
+# OS
 .DS_Store
+Thumbs.db
 
+# Dependencies
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Environment
+.env
+.env.local
+
+# Database
+*.db
+
+# Build output
+dist/
+build/
+
+# Uploads
+uploads/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Coverage
 /coverage
 
+# YOLO model files (large binaries)
+# backend/src/models/*.pt

@@ -13,3 +13,5 @@ google-genai
 botocore
 protobuf
 pillow
+shapely
+pyproj

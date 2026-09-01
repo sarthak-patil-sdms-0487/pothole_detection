@@ -1,12 +1,13 @@
-import { Home, AlertCircle, Map, LayoutDashboard } from 'lucide-react';
+import { Home, AlertCircle, Video, FileText, BarChart3 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
 
 const navItems = [
   { name: 'Home', href: '/', icon: Home },
+  { name: 'Drive AI', href: '/drive', icon: Video },
   { name: 'Report', href: '/report', icon: AlertCircle },
-  { name: 'Map', href: '/map', icon: Map },
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Reports', href: '/reports', icon: FileText },
+  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
 ];
 
 const BottomNav = () => {

@@ -19,6 +19,9 @@ class ReportBase(BaseModel):
     severity: Optional[str] = None
     estSize: Optional[str] = None
     message: Optional[str] = None
+    defect_id: Optional[int] = None
+    segment_id: Optional[int] = None
+    capture_source: Optional[str] = "WORKER"  # WORKER | SURVEY | OPPORTUNISTIC
 
 class ReportCreate(ReportBase):
     pass
@@ -32,6 +35,9 @@ class ReportUpdate(BaseModel):
     severity: Optional[str] = None
     estSize: Optional[str] = None
     message: Optional[str] = None
+    defect_id: Optional[int] = None
+    segment_id: Optional[int] = None
+    capture_source: Optional[str] = None
 
 class Report(ReportBase):
     id: int

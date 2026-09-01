@@ -21,7 +21,7 @@ const MainLayout = () => {
           </div>
         </main>
         
-        {/*<BottomNav />*/}
+        <BottomNav />
         <PWAPrompt />
       </div>
     </div>

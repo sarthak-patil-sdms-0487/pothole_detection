@@ -1,13 +1,19 @@
 import { useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
+interface ShareData {
+  title: string | null;
+  text: string | null;
+  url: string | null;
+}
+
 const ShareTargetPage = () => {
   const location = useLocation();
-  const [shareData, setShareData] = useState(null);
+  const [shareData, setShareData] = useState<ShareData | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const data = {
+    const data: ShareData = {
       title: params.get('title'),
       text: params.get('text'),
       url: params.get('url'),

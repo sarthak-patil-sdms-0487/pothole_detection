@@ -1,1 +1,1 @@
-export const API_BASE_URL = 'https://ricotta-camping-rash.ngrok-free.dev';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || '';

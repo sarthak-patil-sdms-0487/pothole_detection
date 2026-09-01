@@ -16,6 +16,13 @@ app = FastAPI()
 # Add CORS middleware
 add_cors_middleware(app)
 
+import os
+from fastapi.staticfiles import StaticFiles
+
+# Ensure uploads directory exists and mount static files
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 # Include the API router
 app.include_router(router)
 

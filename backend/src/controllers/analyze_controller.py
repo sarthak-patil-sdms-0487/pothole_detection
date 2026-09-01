@@ -12,28 +12,44 @@ from ..services import yolo_service, gemini_service, s3_service
 
 async def analyze_image(
     image: UploadFile = File(...),
-    detection_method: str = Form(...),
+    detection_method: str = Form("YOLO (best.pt)"),
     user_pothole_count: Optional[int] = Form(None),
     message: Optional[str] = Form(None),
-    camera_height_m: Optional[float] = Form(None),
-    tilt_angle_deg: Optional[float] = Form(None),
-    fov_vertical_deg: Optional[float] = Form(None),
-    fov_horizontal_deg: Optional[float] = Form(None),
-    conf_threshold: Optional[float] = Form(0.4)
+    camera_height_m: Optional[float] = Form(1.2),
+    tilt_angle_deg: Optional[float] = Form(45.0),
+    fov_vertical_deg: Optional[float] = Form(45.0),
+    fov_horizontal_deg: Optional[float] = Form(60.0),
+    conf_threshold: Optional[float] = Form(0.35),
+    capture_source: Optional[str] = Form("WORKER")
 ):
+    # Set default values if not provided
+    camera_height_m = camera_height_m or 1.2
+    tilt_angle_deg = tilt_angle_deg or 45.0
+    fov_vertical_deg = fov_vertical_deg or 45.0
+    fov_horizontal_deg = fov_horizontal_deg or 60.0
+    conf_threshold = conf_threshold or 0.35
+    capture_source = capture_source or "WORKER"
+
     if detection_method == "YOLO (best.pt)":
-        if not all([camera_height_m, tilt_angle_deg, fov_vertical_deg, fov_horizontal_deg, conf_threshold]):
-            raise HTTPException(status_code=422, detail="Missing required parameters for YOLO detection.")
-        response = await analyze_image_yolo(image, camera_height_m, tilt_angle_deg, fov_vertical_deg, fov_horizontal_deg, conf_threshold, message)
+        response = await analyze_image_yolo(
+            image=image,
+            camera_height_m=camera_height_m,
+            tilt_angle_deg=tilt_angle_deg,
+            fov_vertical_deg=fov_vertical_deg,
+            fov_horizontal_deg=fov_horizontal_deg,
+            conf_threshold=conf_threshold,
+            message=message
+        )
     elif detection_method == "LLM - Gemini":
-        response = await analyze_image_gemini(image, message)
+        response = await analyze_image_gemini(image=image, message=message)
     else:
-        raise HTTPException(status_code=400, detail="Invalid detection method")
+        raise HTTPException(status_code=400, detail=f"Invalid detection method: {detection_method}")
     
     response_content = response.body.decode('utf-8')
     response_data = json.loads(response_content)
     response_data['detection_method'] = detection_method
     response_data['user_pothole_count'] = user_pothole_count
+    response_data['capture_source'] = capture_source
     return JSONResponse(content=response_data)
 
 
@@ -47,13 +63,15 @@ async def analyze_image_yolo(
     message: Optional[str]
 ):
     image_bytes = await image.read()
-    
     analysis_id = str(uuid.uuid4())
     
     original_filename = f"analysis/{analysis_id}_original.jpg"
     original_s3_url = s3_service.upload_file_obj_to_s3(BytesIO(image_bytes), original_filename)
     if not original_s3_url:
-        raise HTTPException(status_code=500, detail="Failed to upload original image.")
+        # Fallback to local data URI or placeholder if S3 credentials are not configured
+        import base64
+        b64 = base64.b64encode(image_bytes).decode("utf-8")
+        original_s3_url = f"data:image/jpeg;base64,{b64}"
 
     annotated_img, pothole_details = yolo_service.process_image_with_yolo(
         image_bytes,
@@ -67,17 +85,21 @@ async def analyze_image_yolo(
     annotated_s3_url = original_s3_url
     if pothole_details:
         is_success, buffer = cv2.imencode(".jpg", annotated_img)
-        if not is_success:
-            raise HTTPException(status_code=500, detail="Failed to encode annotated image.")
-        
-        annotated_filename = f"analysis/{analysis_id}_annotated.jpg"
-        annotated_s3_url = s3_service.upload_file_obj_to_s3(BytesIO(buffer), annotated_filename)
-        if not annotated_s3_url:
-            raise HTTPException(status_code=500, detail="Failed to upload annotated image.")
+        if is_success:
+            annotated_filename = f"analysis/{analysis_id}_annotated.jpg"
+            uploaded_url = s3_service.upload_file_obj_to_s3(BytesIO(buffer), annotated_filename)
+            if uploaded_url:
+                annotated_s3_url = uploaded_url
+            else:
+                import base64
+                b64 = base64.b64encode(buffer.tobytes()).decode("utf-8")
+                annotated_s3_url = f"data:image/jpeg;base64,{b64}"
 
     camera_params = {
-        "camera_height_m": camera_height_m, "tilt_angle_deg": tilt_angle_deg,
-        "fov_vertical_deg": fov_vertical_deg, "fov_horizontal_deg": fov_horizontal_deg
+        "camera_height_m": camera_height_m,
+        "tilt_angle_deg": tilt_angle_deg,
+        "fov_vertical_deg": fov_vertical_deg,
+        "fov_horizontal_deg": fov_horizontal_deg
     }
 
     return JSONResponse(content={
@@ -93,13 +115,14 @@ async def analyze_image_gemini(
     message: Optional[str]
 ):
     image_bytes = await image.read()
-    
     analysis_id = str(uuid.uuid4())
     
     original_filename = f"analysis/{analysis_id}_original.jpg"
     original_s3_url = s3_service.upload_file_obj_to_s3(BytesIO(image_bytes), original_filename)
     if not original_s3_url:
-        raise HTTPException(status_code=500, detail="Failed to upload original image.")
+        import base64
+        b64 = base64.b64encode(image_bytes).decode("utf-8")
+        original_s3_url = f"data:image/jpeg;base64,{b64}"
 
     pil_image = Image.open(BytesIO(image_bytes)).convert("RGB")
     
@@ -137,13 +160,15 @@ async def analyze_image_gemini(
             cv2.putText(annotated_img, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
 
         is_success, buffer = cv2.imencode(".jpg", annotated_img)
-        if not is_success:
-            raise HTTPException(status_code=500, detail="Failed to encode annotated image.")
-        
-        annotated_filename = f"analysis/{analysis_id}_annotated.jpg"
-        annotated_s3_url = s3_service.upload_file_obj_to_s3(BytesIO(buffer), annotated_filename)
-        if not annotated_s3_url:
-            raise HTTPException(status_code=500, detail="Failed to upload annotated image.")
+        if is_success:
+            annotated_filename = f"analysis/{analysis_id}_annotated.jpg"
+            uploaded_url = s3_service.upload_file_obj_to_s3(BytesIO(buffer), annotated_filename)
+            if uploaded_url:
+                annotated_s3_url = uploaded_url
+            else:
+                import base64
+                b64 = base64.b64encode(buffer.tobytes()).decode("utf-8")
+                annotated_s3_url = f"data:image/jpeg;base64,{b64}"
 
     return JSONResponse(content={
         "original_image_url": original_s3_url,
