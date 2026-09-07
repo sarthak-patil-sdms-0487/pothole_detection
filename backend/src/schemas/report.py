@@ -33,7 +33,9 @@ class Report(Base):
     defect_id = Column(Integer, ForeignKey("defect.id"), nullable=True)
     segment_id = Column(Integer, ForeignKey("road_segment.id"), nullable=True)
     capture_source = Column(String, nullable=True)  # WORKER | SURVEY | OPPORTUNISTIC
+    survey_run_id = Column(Integer, ForeignKey("survey_run.id"), nullable=True)
 
     # Relationships
     defect = relationship("Defect", backref="reports")
     segment = relationship("RoadSegment", backref="reports")
+    survey_run = relationship("SurveyRun", backref="reports")

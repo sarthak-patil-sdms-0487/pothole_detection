@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, Bell, User, Sun, Moon, ArrowRightLeft, ShieldCheck, UserCheck } from 'lucide-react';
+import { Menu, User, Sun, Moon, ArrowRightLeft, ShieldCheck, UserCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 
@@ -26,10 +26,10 @@ const Navbar = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
         </button>
         <Link to="/" className="flex items-center space-x-2 min-w-0">
           <div className="w-8 h-8 sm:w-9 sm:h-9 bg-govBlue rounded-xl flex items-center justify-center shadow-md shrink-0">
-            <span className="text-white font-black text-sm sm:text-lg">M</span>
+            <span className="text-white font-black text-sm sm:text-lg">S</span>
           </div>
           <div className="flex flex-col truncate">
-            <span className="text-xs sm:text-base font-black text-gray-900 dark:text-white leading-tight tracking-tight truncate">MIDC Road</span>
+            <span className="text-xs sm:text-base font-black text-gray-900 dark:text-white leading-tight tracking-tight truncate">SIDC Road</span>
             <span className="text-[9px] sm:text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest hidden sm:block">48h Compliance</span>
           </div>
         </Link>
@@ -60,16 +60,11 @@ const Navbar = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
           {darkMode ? <Sun className="h-5 w-5 text-amber-400" /> : <Moon className="h-5 w-5" />}
         </button>
         
-        <Link to="/notifications" className="relative p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-          <Bell className="h-5 w-5" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-status-danger animate-pulse"></span>
-        </Link>
-        
-        <Link to="/profile" className="flex items-center space-x-2 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+        <div className="flex items-center space-x-2 p-1 rounded-full">
           <div className="h-8 w-8 rounded-full bg-govBlue flex items-center justify-center text-white font-bold text-xs shadow-inner">
             {role === 'ENGINEER' ? 'EE' : 'SR'}
           </div>
-        </Link>
+        </div>
       </div>
     </nav>
   );

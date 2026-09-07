@@ -9,6 +9,7 @@ from .evidence import Evidence
 from .slag import SlagLot, SlagDraw
 from .audit_log import AuditLog
 from .report import Report
+from .survey_run import SurveyRun
 
 __all__ = [
     "Base",
@@ -24,4 +25,5 @@ __all__ = [
     "SlagDraw",
     "AuditLog",
     "Report",
+    "SurveyRun",
 ]

@@ -110,7 +110,7 @@ def promote(
         try:
             verdict_rec = evaluate_liability(db, defect.id)
             if verdict_rec and verdict_rec.verdict == "IN_WARRANTY":
-                notice_service.send_notice(db, defect.id, actor=actor)
+                notice_service.send_notice(db, defect.id, force=False, actor=actor)
         except Exception as e:
             logger.error(f"[PROMOTION] Liability / Notice dispatch error on Defect #{defect.id}: {e}")
 

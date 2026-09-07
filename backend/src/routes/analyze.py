@@ -15,7 +15,7 @@ async def analyze_image_route(
     tilt_angle_deg: Optional[float] = Form(45.0),
     fov_vertical_deg: Optional[float] = Form(45.0),
     fov_horizontal_deg: Optional[float] = Form(60.0),
-    conf_threshold: Optional[float] = Form(0.35),
+    conf_threshold: Optional[float] = Form(0.15),
     capture_source: Optional[str] = Form("WORKER")
 ):
     return await analyze_controller.analyze_image(

@@ -7,7 +7,6 @@ import {
   Map, 
   BarChart2, 
   Settings, 
-  Info, 
   X, 
   FileCheck2, 
   Crosshair 
@@ -27,7 +26,6 @@ const Sidebar = ({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => vo
     { name: 'Report Pothole', href: '/report', icon: AlertCircle },
     { name: 'My Reports', href: '/reports', icon: List },
     { name: 'Map View', href: '/map', icon: Map },
-    { name: 'About', href: '/about', icon: Info },
   ];
 
   const engineerNav = [
@@ -65,7 +63,7 @@ const Sidebar = ({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => vo
         )}
       >
         <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200 dark:border-gray-700 lg:hidden shrink-0">
-          <span className="text-xl font-bold text-gray-900 dark:text-white">PWD Portal</span>
+          <span className="text-xl font-bold text-gray-900 dark:text-white">SIDC Portal</span>
           <button onClick={() => setOpen(false)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
             <X className="h-6 w-6" />
           </button>

@@ -1,16 +1,45 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, AlertTriangle, Clock, CheckCircle, MapPin } from 'lucide-react';
+import { ArrowRight, AlertTriangle, Clock, CheckCircle, MapPin, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../store/authStore';
 import Dashboard from './Dashboard';
+import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 
 const LandingPage = () => {
   const { role } = useAuthStore();
+  const [stats, setStats] = useState<any>(null);
+  const [loadingStats, setLoadingStats] = useState(true);
 
   // If the user is viewing as an engineer, show the dashboard instead of the citizen landing page
   if (role === 'ENGINEER') {
     return <Dashboard />;
   }
+
+  // Fetch live stats from DB (Component E)
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const resp = await fetch(`${API_BASE_URL}/api/stats/dashboard`);
+        if (resp.ok) {
+          const data = await resp.json();
+          setStats(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch dashboard stats:', err);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+    fetchStats();
+  }, []);
+
+  const displayStats = [
+    { name: 'Total Reports', value: stats?.total_reports ?? '—', icon: AlertTriangle, color: 'text-status-warning' },
+    { name: 'Defects Resolved', value: stats?.closed_defects ?? '—', icon: CheckCircle, color: 'text-status-success' },
+    { name: 'Open Reports', value: stats?.open_count ?? '—', icon: Clock, color: 'text-govBlue' },
+    { name: 'Active Segments', value: stats?.active_segments ?? '—', icon: MapPin, color: 'text-accent-orange' },
+  ];
 
   return (
     <div className="flex flex-col min-h-full">
@@ -23,7 +52,7 @@ const LandingPage = () => {
               animate={{ opacity: 1, y: 0 }}
               className="text-3xl sm:text-4xl lg:text-6xl font-bold tracking-tight text-white"
             >
-              Smart Pothole Reporting System
+              SIDC Road Defect Intelligence
             </motion.h1>
             <motion.p 
               initial={{ opacity: 0, y: 20 }}
@@ -31,7 +60,7 @@ const LandingPage = () => {
               transition={{ delay: 0.1 }}
               className="mt-4 sm:mt-6 text-base sm:text-lg leading-7 sm:leading-8 text-gray-300"
             >
-              Help keep our roads safe. Snap a photo of a pothole, let our AI analyze it, and track the repair progress in real-time.
+              AI-powered road defect detection and compliance tracking for SIDC managed infrastructure.
             </motion.p>
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
@@ -53,14 +82,9 @@ const LandingPage = () => {
         </div>
       </div>
 
-      {/* Stats Section */}
+      {/* Stats Section - Live from DB (Component E) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-8 sm:mb-16">
-        {[
-          { name: 'Total Reports', value: '12,450', icon: AlertTriangle, color: 'text-status-warning' },
-          { name: 'Fixed Potholes', value: '10,230', icon: CheckCircle, color: 'text-status-success' },
-          { name: 'Avg. Repair Time', value: '4.2 Days', icon: Clock, color: 'text-govBlue' },
-          { name: 'Active Zones', value: '15', icon: MapPin, color: 'text-accent-orange' },
-        ].map((stat, idx) => (
+        {displayStats.map((stat, idx) => (
           <motion.div 
             key={stat.name}
             initial={{ opacity: 0, scale: 0.9 }}
@@ -73,7 +97,11 @@ const LandingPage = () => {
             </div>
             <div>
               <p className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">{stat.name}</p>
-              <p className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white mt-1 sm:mt-0">{stat.value}</p>
+              {loadingStats ? (
+                <Loader2 className="w-5 h-5 text-gray-400 animate-spin mt-1" />
+              ) : (
+                <p className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white mt-1 sm:mt-0">{stat.value}</p>
+              )}
             </div>
           </motion.div>
         ))}
@@ -85,7 +113,7 @@ const LandingPage = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
           {[
             { step: '1', title: 'Snap a Photo', desc: 'Take a picture of the pothole. Our app automatically captures the GPS location.' },
-            { step: '2', title: 'AI Analysis', desc: 'Our AI instantly estimates the severity, size, and generates a work order.' },
+            { step: '2', title: 'AI Analysis', desc: 'YOLO or Gemini AI instantly estimates the severity, size, and generates a work order.' },
             { step: '3', title: 'Track Progress', desc: 'Follow the repair process in real-time until the issue is completely resolved.' }
           ].map((item, idx) => (
             <motion.div

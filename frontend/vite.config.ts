@@ -10,9 +10,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg', 'offline.html'],
       manifest: {
-        name: 'PWD Pothole Work Order System',
-        short_name: 'Pothole PWA',
-        description: 'AI-assisted pothole reporting workflow',
+        name: 'SIDC Road Intelligence',
+        short_name: 'SIDC Road',
+        description: 'SIDC Road Defect Intelligence — AI-powered road monitoring',
         theme_color: '#005bb5', // Government Blue
         background_color: '#ffffff',
         display: 'standalone',

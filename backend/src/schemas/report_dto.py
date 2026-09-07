@@ -22,6 +22,7 @@ class ReportBase(BaseModel):
     defect_id: Optional[int] = None
     segment_id: Optional[int] = None
     capture_source: Optional[str] = "WORKER"  # WORKER | SURVEY | OPPORTUNISTIC
+    survey_run_id: Optional[int] = None
 
 class ReportCreate(ReportBase):
     pass
@@ -38,6 +39,7 @@ class ReportUpdate(BaseModel):
     defect_id: Optional[int] = None
     segment_id: Optional[int] = None
     capture_source: Optional[str] = None
+    survey_run_id: Optional[int] = None
 
 class Report(ReportBase):
     id: int

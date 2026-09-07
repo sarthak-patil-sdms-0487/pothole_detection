@@ -20,7 +20,9 @@ import {
   Sparkles,
   Sliders,
   Filter,
-  Check
+  Check,
+  Brain,
+  Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL } from '../config';
@@ -34,6 +36,7 @@ interface ActiveTrack {
   seenCount: number;
   bestConfidence: number;
   lastBox: { x1: number; y1: number; x2: number; y2: number };
+  lastReportedAt: number; // cooldown timer for POSTs
 }
 
 interface CaptureLog {
@@ -51,6 +54,13 @@ interface CaptureLog {
   isDuplicateMerged?: boolean;
 }
 
+interface OverlayBox {
+  x1: number; y1: number; x2: number; y2: number;
+  confidence: number;
+  label: string;
+  fadeStart: number;
+}
+
 // Distance calculation in meters using Haversine formula
 function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371e3; // Earth radius in meters
@@ -66,6 +76,8 @@ function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2:
   return R * c;
 }
 
+const REPORT_COOLDOWN_MS = 5000; // 5s cooldown per track before posting again
+
 const DriveMode: React.FC = () => {
   const [sourceMode, setSourceMode] = useState<'video' | 'camera'>('video');
   const [isActive, setIsActive] = useState<boolean>(false);
@@ -73,6 +85,7 @@ const DriveMode: React.FC = () => {
   const [currentPosition, setCurrentPosition] = useState<GeolocationPosition | null>(null);
   const [timeIntervalSeconds, setTimeIntervalSeconds] = useState<number>(2);
   const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.15); // Sensitive default (15%)
+  const [detectionMode, setDetectionMode] = useState<'yolo' | 'gemini'>('yolo');
   
   // Telemetry metrics
   const [capturedFramesCount, setCapturedFramesCount] = useState<number>(0);
@@ -90,12 +103,24 @@ const DriveMode: React.FC = () => {
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Survey run state (Component D)
+  const [surveyRunId, setSurveyRunId] = useState<number | null>(null);
+
+  // Live canvas overlay boxes (Component A)
+  const [overlayBoxes, setOverlayBoxes] = useState<OverlayBox[]>([]);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const overlayAnimRef = useRef<number | null>(null);
+
   // Smooth simulated road progression along MIDC Chakan Ph-2
   const simLatRef = useRef<number>(18.7512);
   const simLngRef = useRef<number>(73.7812);
   const simHeadingRef = useRef<number>(0.00008);
 
+  // Ref always holds the latest GPS position — bypasses stale-closure in setInterval
+  const currentPositionRef = useRef<GeolocationPosition | null>(null);
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoContainerRef = useRef<HTMLDivElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const wakeLockRef = useRef<any>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -174,7 +199,88 @@ const DriveMode: React.FC = () => {
     }
   };
 
-  // Process and analyze an opportunistic snapshot completely in background WITHOUT stopping or cutting video
+  // ─── Canvas Overlay Drawing (Component A) ──────────────────────────────────
+  const drawOverlayBoxes = useCallback(() => {
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    if (!canvas || !video) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Match canvas size to displayed video
+    const rect = video.getBoundingClientRect();
+    if (canvas.width !== rect.width || canvas.height !== rect.height) {
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const now = Date.now();
+    const scaleX = canvas.width / (video.videoWidth || 1);
+    const scaleY = canvas.height / (video.videoHeight || 1);
+
+    const boxes = overlayBoxes.filter(b => now - b.fadeStart < 3000);
+
+    boxes.forEach((box) => {
+      const age = now - box.fadeStart;
+      const alpha = Math.max(0, 1 - age / 3000);
+
+      const x1 = box.x1 * scaleX;
+      const y1 = box.y1 * scaleY;
+      const x2 = box.x2 * scaleX;
+      const y2 = box.y2 * scaleY;
+      const w = x2 - x1;
+      const h = y2 - y1;
+
+      // Glowing green bounding box
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = '#00ff88';
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = '#00ff88';
+      ctx.shadowBlur = 8;
+      ctx.strokeRect(x1, y1, w, h);
+
+      // Label background
+      const label = box.label;
+      ctx.font = 'bold 12px Inter, sans-serif';
+      const textMetrics = ctx.measureText(label);
+      const labelW = textMetrics.width + 10;
+      const labelH = 20;
+      ctx.fillStyle = 'rgba(0, 255, 136, 0.85)';
+      ctx.shadowBlur = 0;
+      ctx.fillRect(x1, Math.max(0, y1 - labelH), labelW, labelH);
+
+      // Label text
+      ctx.fillStyle = '#000';
+      ctx.globalAlpha = alpha;
+      ctx.fillText(label, x1 + 5, Math.max(14, y1 - 5));
+      ctx.restore();
+    });
+
+    // Cleanup expired boxes
+    if (boxes.length < overlayBoxes.length) {
+      setOverlayBoxes(boxes);
+    }
+
+    overlayAnimRef.current = requestAnimationFrame(drawOverlayBoxes);
+  }, [overlayBoxes]);
+
+  // Start / stop overlay animation loop
+  useEffect(() => {
+    if (isActive && overlayBoxes.length > 0) {
+      overlayAnimRef.current = requestAnimationFrame(drawOverlayBoxes);
+    }
+    return () => {
+      if (overlayAnimRef.current) {
+        cancelAnimationFrame(overlayAnimRef.current);
+      }
+    };
+  }, [isActive, overlayBoxes, drawOverlayBoxes]);
+
+  // ─── Frame Capture & Analysis ──────────────────────────────────────────────
   const captureAndAnalyzeFrame = useCallback(async () => {
     if (!videoRef.current || isProcessing) return;
 
@@ -184,17 +290,26 @@ const DriveMode: React.FC = () => {
     setIsProcessing(true);
     const logId = Math.random().toString(36).substring(2, 9);
     
-    // Compute smooth vehicle coordinates
-    let lat = currentPosition?.coords.latitude || 0;
-    let lng = currentPosition?.coords.longitude || 0;
-    let speed = currentPosition?.coords.speed || null;
+    // Compute vehicle coordinates — real GPS when available, simulated for video mode
+    const livePos = currentPositionRef.current;
+    const hasRealGPS =
+      livePos !== null &&
+      (livePos.coords.latitude !== 0 || livePos.coords.longitude !== 0);
 
-    if (sourceMode === 'video' || (!lat && !lng)) {
+    let lat: number;
+    let lng: number;
+    let speed: number | null;
+
+    if (sourceMode === 'video' || !hasRealGPS) {
       simLatRef.current += simHeadingRef.current * (0.8 + Math.random() * 0.4);
       simLngRef.current += simHeadingRef.current * (0.8 + Math.random() * 0.4);
       lat = simLatRef.current;
       lng = simLngRef.current;
-      speed = 7.5; // ~27 km/h
+      speed = 7.5;
+    } else {
+      lat = livePos.coords.latitude;
+      lng = livePos.coords.longitude;
+      speed = livePos.coords.speed;
     }
 
     // Downscale on offscreen canvas for fast background inference (~50ms)
@@ -236,7 +351,7 @@ const DriveMode: React.FC = () => {
       try {
         const formData = new FormData();
         formData.append('image', blob, `drive_${logId}.jpg`);
-        formData.append('detection_method', 'YOLO (best.pt)');
+        formData.append('detection_method', detectionMode === 'gemini' ? 'LLM - Gemini' : 'YOLO (best.pt)');
         formData.append('conf_threshold', confidenceThreshold.toString());
         formData.append('capture_source', 'OPPORTUNISTIC');
 
@@ -251,6 +366,20 @@ const DriveMode: React.FC = () => {
         const potholes = result.pothole_details || [];
         const potholeCount = potholes.length;
         const now = Date.now();
+
+        // Component A: Push bounding boxes to overlay canvas
+        if (potholeCount > 0) {
+          const newBoxes: OverlayBox[] = potholes.map((p: any, i: number) => ({
+            x1: p.box_pixels?.x1 || 0,
+            y1: p.box_pixels?.y1 || 0,
+            x2: p.box_pixels?.x2 || 0,
+            y2: p.box_pixels?.y2 || 0,
+            confidence: p.confidence || 0,
+            label: `#${i + 1} ${((p.confidence || 0) * 100).toFixed(0)}%`,
+            fadeStart: now,
+          }));
+          setOverlayBoxes((prev) => [...newBoxes, ...prev.filter(b => now - b.fadeStart < 3000)]);
+        }
 
         if (potholeCount > 0) {
           let hasBrandNewPothole = false;
@@ -268,7 +397,6 @@ const DriveMode: React.FC = () => {
             });
 
             if (matchingTrack) {
-              // Same physical pothole seen across consecutive video frames
               matchingTrack.lastSeenAt = now;
               matchingTrack.seenCount += 1;
               matchingTrack.bestConfidence = Math.max(matchingTrack.bestConfidence, conf);
@@ -277,7 +405,6 @@ const DriveMode: React.FC = () => {
 
               setDeduplicatedSightingsCount((prev) => prev + 1);
             } else {
-              // Brand new physical pothole detected on the road
               const newTrackId = `TRACK-${String(trackCounterRef.current++).padStart(2, '0')}`;
               activeTrackId = newTrackId;
               hasBrandNewPothole = true;
@@ -291,6 +418,7 @@ const DriveMode: React.FC = () => {
                 seenCount: 1,
                 bestConfidence: conf,
                 lastBox: boxPixels,
+                lastReportedAt: 0,
               };
 
               tracksListRef.current.push(createdTrack);
@@ -302,12 +430,17 @@ const DriveMode: React.FC = () => {
             }
           });
 
-          // Only submit a new report to backend if it's a new pothole
-          if (hasBrandNewPothole) {
-            const reportPayload = {
+          // Component C: Cooldown — only POST if brand new OR cooldown expired
+          const targetTrack = tracksListRef.current.find(t => t.trackId === activeTrackId);
+          const shouldPost = hasBrandNewPothole || (targetTrack && (now - targetTrack.lastReportedAt > REPORT_COOLDOWN_MS));
+
+          if (shouldPost) {
+            if (targetTrack) targetTrack.lastReportedAt = now;
+
+            const reportPayload: any = {
               original_image_url: result.original_image_url || '',
               annotated_image_url: result.annotated_image_url || '',
-              detection_method: 'YOLO (best.pt)',
+              detection_method: detectionMode === 'gemini' ? 'LLM - Gemini' : 'YOLO (best.pt)',
               camera_params: result.camera_params,
               pothole_details: potholes,
               user_pothole_count: potholeCount,
@@ -318,6 +451,11 @@ const DriveMode: React.FC = () => {
               capture_source: 'OPPORTUNISTIC',
               severity: potholeCount > 2 ? 'High' : potholeCount > 1 ? 'Medium' : 'Low',
             };
+
+            // Tag with survey run if available
+            if (surveyRunId) {
+              reportPayload.survey_run_id = surveyRunId;
+            }
 
             try {
               await fetch(`${API_BASE_URL}/api/reports`, {
@@ -372,7 +510,7 @@ const DriveMode: React.FC = () => {
         setIsProcessing(false);
       }
     }, 'image/jpeg', 0.88);
-  }, [confidenceThreshold, currentPosition, isProcessing, sourceMode]);
+  }, [confidenceThreshold, isProcessing, sourceMode, detectionMode, surveyRunId]);
 
   // Start / Stop Continuous Drive Mode
   const toggleDriveMode = async () => {
@@ -388,8 +526,44 @@ const DriveMode: React.FC = () => {
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
+
+      // End the survey run (Component D)
+      if (surveyRunId) {
+        try {
+          await fetch(`${API_BASE_URL}/api/survey-runs/${surveyRunId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              total_frames: capturedFramesCount,
+              defects_found: uniqueDefectsCount,
+            }),
+          });
+        } catch (err) {
+          console.error('Failed to end survey run:', err);
+        }
+        setSurveyRunId(null);
+      }
     } else {
       setErrorMsg(null);
+
+      // Start a new survey run (Component D)
+      try {
+        const runResp = await fetch(`${API_BASE_URL}/api/survey-runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source_type: sourceMode,
+            operator_name: 'Surveyor',
+          }),
+        });
+        if (runResp.ok) {
+          const runData = await runResp.json();
+          setSurveyRunId(runData.id);
+        }
+      } catch (err) {
+        console.error('Failed to create survey run:', err);
+      }
+
       if (sourceMode === 'camera') {
         await startCamera();
       } else {
@@ -418,6 +592,24 @@ const DriveMode: React.FC = () => {
     }
   };
 
+  // Wire up live GPS watcher — keeps currentPositionRef always fresh
+  useEffect(() => {
+    if (!('geolocation' in navigator)) {
+      console.warn('[GPS] Geolocation API not available in this browser/context.');
+      return;
+    }
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        setCurrentPosition(pos);
+        currentPositionRef.current = pos;
+      },
+      (err) => console.warn('[GPS] watchPosition error:', err.message),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       releaseWakeLock();
@@ -425,26 +617,34 @@ const DriveMode: React.FC = () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
+      if (overlayAnimRef.current) {
+        cancelAnimationFrame(overlayAnimRef.current);
+      }
     };
   }, []);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-govBlue to-blue-900 text-white rounded-2xl p-6 shadow-xl relative overflow-hidden">
+      <div className="bg-gradient-to-r from-govBlue to-blue-900 text-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-xl relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-500/30 text-blue-200 border border-blue-400/30 flex items-center gap-1">
                 <Crosshair className="w-3 h-3" /> Continuous Smooth Drive Mode
               </span>
+              {surveyRunId && (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 flex items-center gap-1">
+                  <Layers className="w-3 h-3" /> Run #{surveyRunId}
+                </span>
+              )}
               {wakeLockActive && (
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3" /> Screen Active
                 </span>
               )}
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Opportunistic Drive Mode</h1>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">SIDC Road Survey</h1>
             <p className="text-blue-100 text-sm mt-1 max-w-xl">
               Clean, uninterrupted video playback at full speed. Road frames are scanned in the background and grouped to prevent duplicate entries.
             </p>
@@ -453,7 +653,7 @@ const DriveMode: React.FC = () => {
           <div className="flex items-center gap-3">
             <button
               onClick={toggleDriveMode}
-              className={`px-6 py-3.5 rounded-xl font-bold flex items-center gap-2.5 shadow-lg transition-all transform active:scale-95 ${
+              className={`px-4 sm:px-6 py-3 sm:py-3.5 rounded-xl font-bold flex items-center gap-2 sm:gap-2.5 shadow-lg transition-all transform active:scale-95 text-sm sm:text-base ${
                 isActive
                   ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse'
                   : 'bg-emerald-500 hover:bg-emerald-600 text-white'
@@ -494,7 +694,7 @@ const DriveMode: React.FC = () => {
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
             }`}
           >
-            <Film className="w-4 h-4" /> Upload Dashcam Video (Continuous)
+            <Film className="w-4 h-4" /> <span className="hidden sm:inline">Upload</span> Video
           </button>
           <button
             onClick={() => {
@@ -507,7 +707,7 @@ const DriveMode: React.FC = () => {
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
             }`}
           >
-            <Video className="w-4 h-4" /> Live Camera / Dashcam Stream
+            <Video className="w-4 h-4" /> <span className="hidden sm:inline">Live</span> Camera
           </button>
         </div>
 
@@ -517,10 +717,9 @@ const DriveMode: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Viewport Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-        {/* CLEAN LIVE VIDEO VIEWPORT (NO INTRUSIVE BOXES BLOCKING THE VIDEO) */}
-        <div className="lg:col-span-2 bg-black rounded-2xl overflow-hidden shadow-2xl relative min-h-[240px] sm:min-h-[380px] aspect-video sm:aspect-auto flex items-center justify-center border border-gray-800">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* LIVE VIDEO VIEWPORT WITH CANVAS OVERLAY */}
+        <div ref={videoContainerRef} className="lg:col-span-2 bg-black rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl relative min-h-[200px] sm:min-h-[380px] aspect-video flex items-center justify-center border border-gray-800">
           <video
             ref={videoRef}
             src={sourceMode === 'video' ? videoSrc || undefined : undefined}
@@ -529,6 +728,13 @@ const DriveMode: React.FC = () => {
             muted
             loop
             className="w-full h-full object-cover max-h-[500px]"
+          />
+
+          {/* Canvas overlay for bounding boxes */}
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 w-full h-full pointer-events-none z-10"
+            style={{ objectFit: 'cover' }}
           />
 
           {/* Fallback Screen when Inactive or No Video Selected */}
@@ -541,7 +747,7 @@ const DriveMode: React.FC = () => {
                     {videoFile ? videoFile.name : 'No Dashcam Video Selected'}
                   </h3>
                   <p className="text-xs text-gray-400">
-                    Select any recorded dashcam video (.mp4, .webm, .mov). The video runs smoothly while YOLO extracts detections into the feed below.
+                    Select any recorded dashcam video (.mp4, .webm, .mov). The video runs smoothly while AI extracts detections.
                   </p>
                   <input
                     ref={fileInputRef}
@@ -574,7 +780,7 @@ const DriveMode: React.FC = () => {
             <div className="absolute top-4 left-4 right-4 pointer-events-none flex justify-between items-center text-xs font-mono z-20">
               <div className="bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg text-emerald-400 border border-emerald-500/30 flex items-center gap-2 shadow">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                CONTINUOUS STREAMING ({sourceMode === 'video' ? 'VIDEO FILE' : 'LIVE DASHCAM'})
+                {detectionMode === 'gemini' ? '✨ GEMINI' : '🧠 YOLO'} · {sourceMode === 'video' ? 'VIDEO FILE' : 'LIVE DASHCAM'}
               </div>
               {isProcessing && (
                 <div className="bg-blue-600/90 backdrop-blur-md px-3 py-1.5 rounded-lg text-white font-bold flex items-center gap-2 shadow">
@@ -615,39 +821,85 @@ const DriveMode: React.FC = () => {
               </div>
             </div>
 
+            {/* Live GPS Lock Indicator */}
+            <div className={`mt-2 p-2 rounded-xl border flex items-center gap-2 text-[10px] font-mono ${
+              currentPosition
+                ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/50 text-emerald-700 dark:text-emerald-300'
+                : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-300'
+            }`}>
+              <Navigation className="w-3 h-3 flex-shrink-0" />
+              {currentPosition
+                ? `GPS LOCK · ${currentPosition.coords.latitude.toFixed(5)}, ${currentPosition.coords.longitude.toFixed(5)}`
+                : sourceMode === 'video'
+                  ? 'VIDEO MODE · Simulated coordinates'
+                  : 'GPS ACQUIRING…'
+              }
+            </div>
+
             {lastDetectionResult && (
-              <div className="mt-3 p-2.5 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-mono text-gray-700 dark:text-gray-300 flex items-center gap-2">
+              <div className="mt-2 p-2.5 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-mono text-gray-700 dark:text-gray-300 flex items-center gap-2">
                 <Sparkles className="w-3.5 h-3.5 text-govBlue" />
                 <span className="truncate">{lastDetectionResult}</span>
               </div>
             )}
           </div>
 
-          {/* Detection Sensitivity Settings */}
+          {/* Detection Settings (Component B: YOLO/Gemini Switcher) */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-200 dark:border-gray-700 space-y-4">
             <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
               <Sliders className="w-4 h-4 text-govBlue" /> Detection Settings
             </h2>
 
-            {/* Confidence Threshold */}
+            {/* AI Model Toggle (Component B) */}
             <div>
-              <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
-                <span>YOLO Confidence Threshold</span>
-                <span className="font-bold text-govBlue font-mono">{(confidenceThreshold * 100).toFixed(0)}%</span>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Detection Engine</p>
+              <div className="flex bg-gray-100 dark:bg-gray-900 rounded-xl p-1 gap-1">
+                <button
+                  onClick={() => setDetectionMode('yolo')}
+                  disabled={isActive}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                    detectionMode === 'yolo'
+                      ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-800'
+                  }`}
+                >
+                  <Brain className="w-3.5 h-3.5" /> YOLO v8
+                </button>
+                <button
+                  onClick={() => setDetectionMode('gemini')}
+                  disabled={isActive}
+                  className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                    detectionMode === 'gemini'
+                      ? 'bg-white dark:bg-gray-700 text-purple-600 dark:text-purple-400 shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-800'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" /> Gemini
+                </button>
               </div>
-              <input
-                type="range"
-                min="0.05"
-                max="0.60"
-                step="0.05"
-                value={confidenceThreshold}
-                onChange={(e) => setConfidenceThreshold(Number(e.target.value))}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
-              />
-              <p className="text-[10px] text-gray-400 mt-1">
-                10% - 15% is recommended for moving road videos.
-              </p>
             </div>
+
+            {/* Confidence Threshold */}
+            {detectionMode === 'yolo' && (
+              <div>
+                <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
+                  <span>YOLO Confidence Threshold</span>
+                  <span className="font-bold text-govBlue font-mono">{(confidenceThreshold * 100).toFixed(0)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.05"
+                  max="0.60"
+                  step="0.05"
+                  value={confidenceThreshold}
+                  onChange={(e) => setConfidenceThreshold(Number(e.target.value))}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+                />
+                <p className="text-[10px] text-gray-400 mt-1">
+                  10% - 15% is recommended for moving road videos.
+                </p>
+              </div>
+            )}
 
             {/* Background Sample Rate */}
             <div>
@@ -682,7 +934,7 @@ const DriveMode: React.FC = () => {
         </div>
       </div>
 
-      {/* Live Stream Capture History Feed (With Annotations & Bounding Boxes) */}
+      {/* Live Stream Capture History Feed */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
         <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4 flex items-center justify-between">
           <span className="flex items-center gap-2">

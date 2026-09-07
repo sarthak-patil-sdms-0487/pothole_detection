@@ -9,15 +9,10 @@ import ReportsList from './pages/ReportsList';
 import MyReports from './pages/MyReports';
 import Dashboard from './pages/Dashboard';
 import EngineerReview from './pages/EngineerReview';
-import TimelinePage from './pages/TimelinePage';
 import MapPage from './pages/MapPage';
 import AnalyticsPage from './pages/AnalyticsPage';
-import NotificationsPage from './pages/NotificationsPage';
-import ProfilePage from './pages/ProfilePage';
 import AdminDashboard from './pages/AdminDashboard';
-import AboutPage from './pages/AboutPage';
 import PushNotificationPrompt from './components/common/PushNotificationPrompt';
-import ShareTargetPage from './pages/ShareTargetPage';
 import PWAInstallPrompt from './components/common/PWAInstallPrompt';
 import ReportDetailsPage from './pages/ReportDetailsPage';
 import { NotificationProvider } from './components/notifications';
@@ -48,14 +43,9 @@ function App() {
                 <Route path="reports/:reportId" element={<ReportDetailsPage />} />
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="review" element={<EngineerReview />} />
-                <Route path="timeline" element={<TimelinePage />} />
                 <Route path="map" element={<MapPage />} />
                 <Route path="analytics" element={<AnalyticsPage />} />
-                <Route path="notifications" element={<NotificationsPage />} />
-                <Route path="profile" element={<ProfilePage />} />
                 <Route path="admin" element={<AdminDashboard />} />
-                <Route path="about" element={<AboutPage />} />
-                <Route path="share-target" element={<ShareTargetPage />} />
               </Route>
             </Routes>
           </Router>

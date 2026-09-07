@@ -10,6 +10,7 @@ const ReportPothole = () => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [location, setLocation] = useState('Location not set');
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -50,6 +51,7 @@ const ReportPothole = () => {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           const { latitude, longitude } = position.coords;
+          setCoords({ lat: latitude, lng: longitude });
           const address = await geocodeCoordinates(latitude, longitude);
           setLocation(address);
           setIsLocating(false);
@@ -115,6 +117,12 @@ const ReportPothole = () => {
       formData.append('fov_vertical_deg', fovVertical);
       formData.append('fov_horizontal_deg', fovHorizontal);
       formData.append('conf_threshold', confThreshold);
+    }
+
+    // Send GPS coordinates to backend for segment matching and dedupe
+    if (coords) {
+      formData.append('lat', String(coords.lat));
+      formData.append('lng', String(coords.lng));
     }
 
     const controller = new AbortController();

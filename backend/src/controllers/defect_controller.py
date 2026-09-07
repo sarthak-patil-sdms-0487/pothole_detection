@@ -133,7 +133,7 @@ async def manual_notice_defect(defect_id: int, actor: str, db: Session) -> defec
     if str(actor).upper() != "ENGINEER":
         raise HTTPException(
             status_code=403,
-            detail="Forbidden: Only PWD/MIDC Engineers can manually bring defects to official Notice."
+            detail="Forbidden: Only SIDC Engineers can manually bring defects to official Notice."
         )
 
     d = db.query(Defect).filter(Defect.id == defect_id).first()
@@ -162,7 +162,7 @@ async def send_defect_notice(defect_id: int, actor: str, force: bool, db: Sessio
     if str(actor).upper() != "ENGINEER":
         raise HTTPException(
             status_code=403,
-            detail="Forbidden: Only PWD/MIDC Engineers can dispatch official statutory notices."
+            detail="Forbidden: Only SIDC Engineers can dispatch official statutory notices."
         )
 
     d = db.query(Defect).filter(Defect.id == defect_id).first()

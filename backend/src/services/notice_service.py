@@ -41,12 +41,12 @@ def generate_notice(db: Session, defect_id: int) -> Dict[str, Any]:
         LiabilityVerdict.defect_id == defect.id
     ).order_by(LiabilityVerdict.id.desc()).first()
 
-    notice_ref = f"MIDC/NOT/2026/{defect.id:04d}"
+    notice_ref = f"SIDC/NOT/2026/{defect.id:04d}"
     issued_at = defect.noticed_at or datetime.datetime.utcnow()
     sla_due_at = defect.sla_due_at or (issued_at + datetime.timedelta(hours=48))
     
     contractor_name = tender.contractor_name if tender else "Contractor Unassigned"
-    contractor_email = tender.contractor_contact_email if tender else "civil-maintenance@midc.maharashtra.gov.in"
+    contractor_email = tender.contractor_contact_email if tender else "civil-maintenance@sidc.maharashtra.gov.in"
     tender_ref = tender.tender_ref if tender else "NO_MATCHING_CONTRACT"
     work_desc = tender.description if tender else "General Road Maintenance"
     dlp_expiry = str(tender.dlp_expiry_date) if (tender and tender.dlp_expiry_date) else "Expired / Out of Warranty"
