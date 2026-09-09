@@ -1,10 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../config';
 import MapSnapshot from '../components/common/MapSnapshot';
 import { ArrowLeft, Calendar, MapPin, AlertTriangle, CheckCircle, Wrench } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
-const getSeverityClass = (severity) => {
+interface ReportDetail {
+    id: number;
+    address?: string | null;
+    status?: string | null;
+    severity?: string | null;
+    reportedDate?: string | null;
+    lat?: number | null;
+    lng?: number | null;
+    [key: string]: any;
+}
+
+type TimelineColor = 'blue' | 'green' | 'purple';
+
+const getSeverityClass = (severity?: string | null) => {
     switch (severity) {
         case 'High': return 'text-red-600 bg-red-100';
         case 'Medium': return 'text-yellow-600 bg-yellow-100';
@@ -13,7 +27,7 @@ const getSeverityClass = (severity) => {
     }
 };
 
-const getStatusClass = (status) => {
+const getStatusClass = (status?: string | null) => {
     switch (status) {
         case 'Reported': return 'text-blue-600 bg-blue-100';
         case 'In Progress': return 'text-purple-600 bg-purple-100';
@@ -22,8 +36,14 @@ const getStatusClass = (status) => {
     }
 };
 
-const TimelineEvent = ({ icon: Icon, title, date, color, isLast }) => {
-    const colorClasses = {
+const TimelineEvent = ({ icon: Icon, title, date, color, isLast }: {
+    icon: LucideIcon;
+    title: string;
+    date?: string | null;
+    color: TimelineColor;
+    isLast?: boolean;
+}) => {
+    const colorClasses: Record<TimelineColor, string> = {
         blue: 'bg-blue-100 text-blue-600',
         green: 'bg-green-100 text-green-600',
         purple: 'bg-purple-100 text-purple-600',
@@ -51,8 +71,13 @@ const TimelineEvent = ({ icon: Icon, title, date, color, isLast }) => {
     );
 };
 
-const StatusTimeline = ({ report }) => {
-    const events = [];
+const StatusTimeline = ({ report }: { report: ReportDetail }) => {
+    const events: Array<{
+        title: string;
+        date?: string | null;
+        icon: LucideIcon;
+        color: TimelineColor;
+    }> = [];
 
     events.push({
         title: 'Reported',
@@ -97,9 +122,9 @@ const StatusTimeline = ({ report }) => {
 const ReportDetailsPage = () => {
     const { reportId } = useParams();
     const navigate = useNavigate();
-    const [report, setReport] = useState(null);
+    const [report, setReport] = useState<ReportDetail | null>(null);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchReport = async () => {
@@ -110,8 +135,8 @@ const ReportDetailsPage = () => {
                 if (!response.ok) throw new Error('Failed to fetch report details.');
                 const data = await response.json();
                 setReport(data);
-            } catch (err) {
-                setError(err.message);
+            } catch (err: any) {
+                setError(err?.message || 'Failed to fetch report details.');
             } finally {
                 setLoading(false);
             }
@@ -192,7 +217,9 @@ const ReportDetailsPage = () => {
                     <div className="p-6 border-t border-gray-200">
                         <h3 className="text-xl font-semibold text-gray-800 mb-4">Location</h3>
                         <div className="h-80 rounded-lg overflow-hidden border border-gray-200">
-                            <MapSnapshot lat={report.lat} lng={report.lng} />
+                            {report.lat != null && report.lng != null && (
+                                <MapSnapshot lat={report.lat} lng={report.lng} />
+                            )}
                         </div>
                     </div>
                 </div>

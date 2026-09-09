@@ -1,5 +1,5 @@
 import datetime
-from typing import Optional
+from typing import Optional, Tuple
 from sqlalchemy.orm import Session
 import logging
 
@@ -15,77 +15,77 @@ HEDGE_TEMPLATE = (
     "To be verified against tender and contract documents before any liability action."
 )
 
+
+def resolve_governing_tender(
+    db: Session,
+    segment_id: Optional[int],
+) -> Tuple[Optional[Tender], str, float, str]:
+    """
+    Resolves which tender governs a road segment, and what that implies for liability.
+
+    This is the single source of truth for contractor attribution. Both the
+    liability verdict and the statutory notice call it, so a notice can never
+    name a different contractor than the verdict it was issued under.
+
+    Returns (tender, verdict, confidence, dlp_expiry_description):
+      - IN_WARRANTY:          governing tender found, today <= dlp_expiry_date
+      - OUT_OF_WARRANTY:      governing tender found, today > dlp_expiry_date
+      - DISPUTED:             more than one tender with a live DLP on the segment
+      - NO_MATCHING_CONTRACT: no tender mapped to the segment
+    """
+    if segment_id is None:
+        return None, "NO_MATCHING_CONTRACT", 0.0, "N/A"
+
+    today = datetime.date.today()
+    mappings = db.query(TenderSegment).filter(TenderSegment.segment_id == segment_id).all()
+    tenders = [
+        db.query(Tender).filter(Tender.id == tm.tender_id).first()
+        for tm in mappings
+    ]
+    tenders = [t for t in tenders if t is not None]
+
+    if not tenders:
+        return None, "NO_MATCHING_CONTRACT", 0.0, "N/A"
+
+    active = [t for t in tenders if t.dlp_expiry_date and today <= t.dlp_expiry_date]
+
+    if len(tenders) == 1:
+        t = tenders[0]
+        expiry = str(t.dlp_expiry_date) if t.dlp_expiry_date else "Unspecified"
+        if active:
+            return t, "IN_WARRANTY", 0.95, expiry
+        return t, "OUT_OF_WARRANTY", 0.90, expiry
+
+    if len(active) > 1:
+        # Overlapping live contracts on one segment. We still surface a governing
+        # tender so a notice can be addressed, but the verdict is flagged for a
+        # human to resolve against the contract documents.
+        refs = ", ".join(t.tender_ref for t in active if t.tender_ref)
+        return active[0], "DISPUTED", 0.50, f"Multiple active contracts ({refs})"
+
+    if len(active) == 1:
+        t = active[0]
+        return t, "IN_WARRANTY", 0.90, str(t.dlp_expiry_date)
+
+    return tenders[0], "OUT_OF_WARRANTY", 0.85, "All mapped tenders expired"
+
+
 def evaluate_liability(db: Session, defect_id: int) -> LiabilityVerdict:
     """
-    Evaluates contractor warranty and liability for a defect based on its road segment mapping.
-    
-    Computes one of:
-      - IN_WARRANTY: Governing tender found and today <= dlp_expiry_date
-      - OUT_OF_WARRANTY: Governing tender found and today > dlp_expiry_date
-      - DISPUTED: Multiple conflicting tenders mapped to segment
-      - NO_MATCHING_CONTRACT: No tender record mapped to segment
-      
-    Inserts an append-only row into liability_verdict table.
+    Evaluates contractor warranty and liability for a defect based on its road
+    segment mapping, and appends a row to liability_verdict. Verdict rows are
+    append-only — an earlier verdict is never rewritten, so the attribution
+    history stays auditable.
     """
     defect = db.query(Defect).filter(Defect.id == defect_id).first()
     if not defect:
         raise ValueError(f"Defect with id={defect_id} not found")
 
-    today = datetime.date.today()
-    segment_id = defect.segment_id
+    tender, verdict_str, confidence, dlp_expiry_str = resolve_governing_tender(db, defect.segment_id)
 
-    verdict_str = "NO_MATCHING_CONTRACT"
-    confidence = 0.0
-    matched_tender_id: Optional[int] = None
-    dlp_expiry_str = "N/A"
     contractor_info = ""
-
-    if segment_id is not None:
-        tender_mappings = db.query(TenderSegment).filter(TenderSegment.segment_id == segment_id).all()
-        
-        if len(tender_mappings) == 1:
-            tender = db.query(Tender).filter(Tender.id == tender_mappings[0].tender_id).first()
-            if tender:
-                matched_tender_id = tender.id
-                dlp_expiry = tender.dlp_expiry_date
-                dlp_expiry_str = str(dlp_expiry) if dlp_expiry else "Unspecified"
-                contractor_info = f" ({tender.contractor_name}, {tender.tender_ref})"
-
-                if dlp_expiry and today <= dlp_expiry:
-                    verdict_str = "IN_WARRANTY"
-                    confidence = 0.95
-                else:
-                    verdict_str = "OUT_OF_WARRANTY"
-                    confidence = 0.90
-
-        elif len(tender_mappings) > 1:
-            # Check if multiple conflicting tenders exist
-            tenders = [
-                db.query(Tender).filter(Tender.id == tm.tender_id).first()
-                for tm in tender_mappings
-            ]
-            tenders = [t for t in tenders if t is not None]
-
-            active_tenders = [t for t in tenders if t.dlp_expiry_date and today <= t.dlp_expiry_date]
-            
-            if len(active_tenders) > 1:
-                verdict_str = "DISPUTED"
-                confidence = 0.50
-                matched_tender_id = active_tenders[0].id
-                dlp_expiry_str = f"Multiple active contracts ({', '.join(t.tender_ref for t in active_tenders if t.tender_ref)})"
-            elif len(active_tenders) == 1:
-                t = active_tenders[0]
-                matched_tender_id = t.id
-                dlp_expiry_str = str(t.dlp_expiry_date)
-                contractor_info = f" ({t.contractor_name}, {t.tender_ref})"
-                verdict_str = "IN_WARRANTY"
-                confidence = 0.90
-            else:
-                # All expired
-                verdict_str = "OUT_OF_WARRANTY"
-                confidence = 0.85
-                matched_tender_id = tenders[0].id if tenders else None
-                dlp_expiry_str = "All mapped tenders expired"
+    if tender:
+        contractor_info = f" ({tender.contractor_name}, {tender.tender_ref})"
 
     rationale_text = HEDGE_TEMPLATE.format(
         verdict=verdict_str,
@@ -94,7 +94,7 @@ def evaluate_liability(db: Session, defect_id: int) -> LiabilityVerdict:
 
     verdict_record = LiabilityVerdict(
         defect_id=defect.id,
-        tender_id=matched_tender_id,
+        tender_id=tender.id if tender else None,
         verdict=verdict_str,
         confidence=confidence,
         rationale=rationale_text,
@@ -105,7 +105,7 @@ def evaluate_liability(db: Session, defect_id: int) -> LiabilityVerdict:
     db.refresh(verdict_record)
 
     logger.info(
-        f"[LIABILITY] Defect #{defect_id} (segment #{segment_id}) -> "
-        f"verdict='{verdict_str}' confidence={confidence} tender_id={matched_tender_id}"
+        f"[LIABILITY] Defect #{defect_id} (segment #{defect.segment_id}) -> "
+        f"verdict='{verdict_str}' confidence={confidence} tender_id={verdict_record.tender_id}"
     )
     return verdict_record

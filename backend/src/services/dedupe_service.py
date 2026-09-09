@@ -10,6 +10,10 @@ from ..services.audit_service import record_audit
 
 logger = logging.getLogger(__name__)
 
+# Sightings within this distance of an existing open defect are treated as
+# repeat observations of that same defect rather than a new one.
+DEDUPE_RADIUS_M = 15.0
+
 def haversine_distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculates great-circle distance between two points in meters using Haversine formula."""
     R = 6371000.0  # Earth radius in meters
@@ -31,10 +35,10 @@ def attach_or_create_defect(
     capture_source: str,
     severity: Optional[float] = None,
     actor: str = "SURVEYOR",
-    radius_meters: float = 20.0
+    radius_meters: float = DEDUPE_RADIUS_M
 ) -> Tuple[Defect, bool]:
     """
-    Groups raw sightings into defects using a 20-meter spatial radius on the road network.
+    Groups raw sightings into defects using a 15-meter spatial radius on the road network.
     - If a matching open defect is found within 20m: attaches to existing defect (prevents duplicate defects).
     - If no match found: opens a new defect.
       * WORKER reports create defects directly in CONFIRMED state.

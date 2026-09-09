@@ -25,6 +25,7 @@ def migrate():
             ("defect_id", "INTEGER REFERENCES defect(id)"),
             ("segment_id", "INTEGER REFERENCES road_segment(id)"),
             ("capture_source", "VARCHAR"),
+            ("survey_run_id", "INTEGER REFERENCES survey_run(id)"),
         ]
         
         with engine.begin() as conn:

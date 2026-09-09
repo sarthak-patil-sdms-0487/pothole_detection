@@ -4,22 +4,17 @@ import {
   Activity, 
   Clock, 
   CheckCircle2, 
-  AlertTriangle, 
   ShieldCheck, 
   ShieldAlert, 
   Car, 
-  FileText, 
   Building2, 
   ArrowRight,
   Loader,
-  Layers,
-  IndianRupee,
   MapPin,
   ChevronRight
 } from 'lucide-react';
-import { motion } from 'framer-motion';
 import { API_BASE_URL } from '../config';
-import { useAuthStore } from '../store/authStore';
+import { useAuthStore, authFetch } from '../store/authStore';
 
 interface Defect {
   id: number;
@@ -48,9 +43,7 @@ const Dashboard: React.FC = () => {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/defects`, {
-        headers: { 'X-Role': role }
-      });
+      const res = await authFetch(`${API_BASE_URL}/api/defects`);
       if (res.ok) {
         const data = await res.json();
         setDefects(data);
@@ -70,7 +63,6 @@ const Dashboard: React.FC = () => {
   const noticedDefects = defects.filter((d) => d.state === 'NOTICED');
   const breachedDefects = defects.filter((d) => d.breach_flag);
   const closedDefects = defects.filter((d) => d.state === 'CLOSED');
-  const inWarrantyDefects = defects.filter((d) => d.latest_verdict?.verdict === 'IN_WARRANTY');
 
   const urgentNoticed = noticedDefects.sort((a, b) => (a.sla_hours_remaining || 0) - (b.sla_hours_remaining || 0)).slice(0, 5);
 

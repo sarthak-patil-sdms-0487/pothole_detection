@@ -149,6 +149,13 @@ export default defineConfig({
       '/uploads': {
         target: 'http://127.0.0.1:8080',
         changeOrigin: true,
+      },
+      // Serve MinIO objects through the dev server so detection images share the
+      // app's origin. Needed for phone/ngrok use: the free ngrok plan only gives
+      // one public domain, so the object store cannot have a tunnel of its own.
+      '/pothole-images': {
+        target: 'http://127.0.0.1:9000',
+        changeOrigin: true,
       }
     }
   },

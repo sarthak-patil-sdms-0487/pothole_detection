@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Menu, User, Sun, Moon, ArrowRightLeft, ShieldCheck, UserCheck } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Menu, Sun, Moon, ArrowRightLeft, ShieldCheck, UserCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 
@@ -16,7 +16,7 @@ const Navbar = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
   }, [darkMode]);
 
   return (
-    <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-14 sm:h-16 flex items-center justify-between px-3 sm:px-6 lg:px-8 shrink-0 shadow-sm z-30">
+    <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-14 sm:h-16 flex items-center justify-between px-3 sm:px-6 lg:px-8 shrink-0 shadow-md dark:shadow-black/30 z-30">
       <div className="flex items-center min-w-0">
         <button
           onClick={toggleSidebar}

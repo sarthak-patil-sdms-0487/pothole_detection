@@ -1,31 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  AlertTriangle, 
-  MapPin, 
+  AlertTriangle,
   CheckCircle2, 
-  XCircle, 
   Search, 
-  Filter, 
-  Calendar, 
   FileCheck2, 
   ArrowLeft, 
   Loader,
   Clock,
   ShieldCheck,
-  ShieldAlert,
   Send,
   Camera,
-  Layers,
   FileText,
-  ExternalLink,
   ChevronRight,
   Sparkles,
-  Lock
+  Lock,
+  Download,
+  Printer,
+  MapPin,
+  ImageIcon,
+  Trash2
 } from 'lucide-react';
 import { API_BASE_URL } from '../config';
-import { useAuthStore } from '../store/authStore';
-import MapSnapshot from '../components/common/MapSnapshot';
+import { useAuthStore, authFetch } from '../store/authStore';
+import { useNotification } from '../components/notifications';
 
 interface Sighting {
   id: number;
@@ -104,6 +102,20 @@ const getVerdictBadge = (verdict?: string) => {
   }
 };
 
+interface AgeingSighting {
+  defect_id: number;
+  state: 'SIGHTING' | 'CONFIRMED';
+  segment_id: number | null;
+  segment_name: string | null;
+  first_seen_at: string | null;
+  age_hours: number;
+  age_days: number;
+  severity: number | null;
+  repeat_sighting_count: number;
+  policy_score: number;
+  notice_threshold: number;
+}
+
 const EngineerReview: React.FC = () => {
   const { role } = useAuthStore();
   const [defects, setDefects] = useState<Defect[]>([]);
@@ -116,6 +128,81 @@ const EngineerReview: React.FC = () => {
   // Modals
   const [noticeModalOpen, setNoticeModalOpen] = useState<boolean>(false);
   const [noticePayload, setNoticePayload] = useState<any | null>(null);
+  const { addNotification } = useNotification();
+  const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Discard a false positive. The detector occasionally boxes clean road, and
+  // those must not linger in the queue or reach a contractor as a complaint.
+  const handleDeleteDefect = async (defectId: number) => {
+    setIsDeleting(true);
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/defects/${defectId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Delete failed' }));
+        throw new Error(err.detail || 'Delete failed');
+      }
+      const data = await res.json();
+      setDeleteTarget(null);
+      setSelectedDefect(null);
+      await fetchDefects();
+      addNotification(
+        `Defect #${defectId} deleted as a false positive` +
+        (data.detached_sightings ? ` — ${data.detached_sightings} sighting(s) kept` : ''),
+        'success'
+      );
+    } catch (e) {
+      setDeleteTarget(null);
+      addNotification(`Could not delete defect: ${(e as Error).message}`, 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Download the complaint as a .txt file the engineer can attach or archive.
+  const handleDownloadNotice = () => {
+    if (!noticePayload) return;
+    const blob = new Blob([noticePayload.notice_text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(noticePayload.notice_ref || 'complaint').replace(/\//g, '-')}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Open the notice in a print window, which also gives "Save as PDF" for free.
+  const handlePrintNotice = () => {
+    if (!noticePayload) return;
+    const w = window.open('', '_blank', 'width=900,height=1000');
+    if (!w) return;
+    const esc = (t: string) =>
+      String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    w.document.write(`<!doctype html><html><head><title>${esc(noticePayload.notice_ref)}</title>
+      <style>
+        @page { margin: 20mm; }
+        body { font-family: Georgia, 'Times New Roman', serif; color:#111; line-height:1.55; }
+        .head { border-bottom:3px double #111; padding-bottom:10px; margin-bottom:18px; }
+        .org { font-size:17px; font-weight:700; letter-spacing:.3px; }
+        .sub { font-size:11px; color:#555; margin-top:2px; }
+        pre { font-family: Georgia, 'Times New Roman', serif; white-space:pre-wrap; font-size:12.5px; }
+        img { max-width:70%; border:1px solid #999; margin-top:10px; }
+        .cap { font-size:10.5px; color:#555; margin-top:4px; }
+      </style></head><body>
+      <div class="head">
+        <div class="org">STATE INDUSTRIAL DEVELOPMENT CORPORATION (SIDC / MIDC)</div>
+        <div class="sub">Pune Division &middot; Road Defect Monitoring Cell</div>
+      </div>
+      <pre>${esc(noticePayload.notice_text)}</pre>
+      ${noticePayload.before_photo_url && String(noticePayload.before_photo_url).startsWith('http')
+        ? `<div><img src="${esc(noticePayload.before_photo_url)}" /><div class="cap">Photographic evidence &mdash; ${esc(noticePayload.notice_ref)}</div></div>`
+        : ''}
+      </body></html>`);
+    w.document.close();
+    setTimeout(() => w.print(), 400);
+  };
   const [repairModalOpen, setRepairModalOpen] = useState<boolean>(false);
   const [comparisonModalOpen, setComparisonModalOpen] = useState<boolean>(false);
 
@@ -123,15 +210,14 @@ const EngineerReview: React.FC = () => {
   const [repairFile, setRepairFile] = useState<File | null>(null);
   const [contractorNotes, setContractorNotes] = useState<string>('Slag-bound cold mix asphalt repair completed.');
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
-  const [verificationResult, setVerificationResult] = useState<any | null>(null);
+  const [ageing, setAgeing] = useState<AgeingSighting[]>([]);
+  const [ageingOpen, setAgeingOpen] = useState<boolean>(false);
 
   const fetchDefects = async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/defects`, {
-        headers: { 'X-Role': role }
-      });
+      const res = await authFetch(`${API_BASE_URL}/api/defects`);
       if (!res.ok) throw new Error('Failed to fetch defect records');
       const data: Defect[] = await res.json();
       setDefects(data);
@@ -147,16 +233,25 @@ const EngineerReview: React.FC = () => {
     }
   };
 
+  const fetchAgeing = async () => {
+    try {
+      const res = await authFetch(`${API_BASE_URL}/api/stats/ageing-sightings`);
+      if (res.ok) setAgeing(await res.json());
+    } catch (e) {
+      console.error('Failed to load ageing sightings:', e);
+    }
+  };
+
   useEffect(() => {
     fetchDefects();
+    fetchAgeing();
   }, [role]);
 
   // Handle manual notice promotion
   const handleManualNotice = async (defectId: number) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/defects/${defectId}/notice`, {
-        method: 'POST',
-        headers: { 'X-Role': role }
+      const res = await authFetch(`${API_BASE_URL}/api/defects/${defectId}/notice`, {
+        method: 'POST'
       });
       if (!res.ok) {
         const err = await res.json();
@@ -166,39 +261,41 @@ const EngineerReview: React.FC = () => {
       setSelectedDefect(updated);
       fetchDefects();
     } catch (e: any) {
-      alert(e.message);
+      addNotification(e.message, 'error');
     }
   };
 
   // Open Notice Modal
   const openNoticeModal = async (defectId: number) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/defects/${defectId}/notice`, {
-        headers: { 'X-Role': role }
-      });
+      const res = await authFetch(`${API_BASE_URL}/api/defects/${defectId}/notice`);
       if (!res.ok) throw new Error('Failed to load notice details');
       const data = await res.json();
       setNoticePayload(data);
       setNoticeModalOpen(true);
     } catch (e: any) {
-      alert(e.message);
+      addNotification(e.message, 'error');
     }
   };
 
   // Send Notice to Contractor
   const handleSendNotice = async (defectId: number) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/defects/${defectId}/notice/send`, {
-        method: 'POST',
-        headers: { 'X-Role': role }
+      const res = await authFetch(`${API_BASE_URL}/api/defects/${defectId}/notice/send`, {
+        method: 'POST'
       });
       if (!res.ok) throw new Error('Failed to dispatch notice');
       const data = await res.json();
-      alert(`Notice ${data.notice.notice_ref} dispatched successfully to ${data.recipient} (Status: ${data.status})`);
+      addNotification(
+        data.status === 'SENT'
+          ? `Notice ${data.notice.notice_ref} emailed to ${data.recipient}`
+          : `Notice ${data.notice.notice_ref} recorded for ${data.recipient} (${data.status})`,
+        data.status === 'SENT' ? 'success' : 'info'
+      );
       setNoticeModalOpen(false);
       fetchDefects();
     } catch (e: any) {
-      alert(e.message);
+      addNotification(e.message, 'error');
     }
   };
 
@@ -208,7 +305,6 @@ const EngineerReview: React.FC = () => {
     if (!selectedDefect || !repairFile) return;
 
     setIsVerifying(true);
-    setVerificationResult(null);
 
     const formData = new FormData();
     formData.append('file', repairFile);
@@ -220,9 +316,8 @@ const EngineerReview: React.FC = () => {
 
     try {
       // 1. Submit repair evidence
-      const evRes = await fetch(`${API_BASE_URL}/api/defects/${selectedDefect.id}/repair-evidence`, {
+      const evRes = await authFetch(`${API_BASE_URL}/api/defects/${selectedDefect.id}/repair-evidence`, {
         method: 'POST',
-        headers: { 'X-Role': role },
         body: formData
       });
 
@@ -232,9 +327,9 @@ const EngineerReview: React.FC = () => {
       }
 
       // 2. Automatically close defect
-      const closeRes = await fetch(`${API_BASE_URL}/api/defects/${selectedDefect.id}/close`, {
+      const closeRes = await authFetch(`${API_BASE_URL}/api/defects/${selectedDefect.id}/close`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Role': role },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: contractorNotes })
       });
 
@@ -243,10 +338,14 @@ const EngineerReview: React.FC = () => {
 
       setRepairModalOpen(false);
       setRepairFile(null);
-      alert(`Repair Verified! Defect #${selectedDefect.id} closed. (SLA Breached: ${closeData.breach_flag ? 'YES' : 'NO'}, Latency: ${closeData.latency_hours}h)`);
+      addNotification(
+        `Defect #${selectedDefect.id} closed — repair verified. ` +
+        `SLA ${closeData.breach_flag ? 'breached' : 'met'}, ${closeData.latency_hours}h.`,
+        closeData.breach_flag ? 'info' : 'success'
+      );
       fetchDefects();
     } catch (err: any) {
-      alert(`Verification Error: ${err.message}`);
+      addNotification(`Verification failed: ${err.message}`, 'error');
     } finally {
       setIsVerifying(false);
     }
@@ -264,11 +363,11 @@ const EngineerReview: React.FC = () => {
   const latestSighting = selectedDefect?.sightings[0];
 
   return (
-    <div className="space-y-4 lg:space-y-6 flex flex-col h-full lg:h-auto pb-8">
+    <div className="w-full min-w-0 space-y-4 lg:space-y-6 flex flex-col h-full lg:h-auto pb-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
-        <div>
-          <div className="flex items-center gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
               Bombay High Court Compliance Pipeline
             </span>
@@ -281,14 +380,109 @@ const EngineerReview: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={fetchDefects}
+            onClick={() => { fetchDefects(); fetchAgeing(); }}
             className="px-4 py-2 text-xs font-bold rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-gray-100"
           >
             Refresh Feed
           </button>
         </div>
+      </div>
+
+      {error && (
+        <div className="flex items-start gap-2 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 rounded-2xl px-5 py-3 text-sm">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Ageing unpromoted sightings.
+          Sightings are never deleted, and the promotion policy is published config
+          rather than a per-user choice. This panel is the control that makes those
+          claims checkable: anything sitting unpromoted stays visible and gets older
+          in public. */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+        <button
+          onClick={() => setAgeingOpen((o) => !o)}
+          className="w-full flex items-center justify-between gap-3 px-6 py-4 text-left hover:bg-gray-50/60 dark:hover:bg-gray-700/30 transition-colors"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+            <span className="font-bold text-sm text-gray-900 dark:text-white">
+              Ageing unpromoted sightings
+            </span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 shrink-0">
+              {ageing.length}
+            </span>
+            <span className="hidden sm:inline text-xs text-gray-400 truncate">
+              no statutory clock running — awaiting corroboration or engineer acceptance
+            </span>
+          </div>
+          <ChevronRight className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${ageingOpen ? 'rotate-90' : ''}`} />
+        </button>
+
+        {ageingOpen && (
+          <div className="border-t border-gray-200 dark:border-gray-700">
+            {ageing.length === 0 ? (
+              <div className="px-6 py-8 text-center text-xs text-gray-400">
+                Nothing is sitting unpromoted. Every open defect has been brought to notice.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-left text-xs">
+                  <thead className="bg-gray-50 dark:bg-gray-900/60 text-gray-500 dark:text-gray-400 font-semibold border-b border-gray-200 dark:border-gray-700">
+                    <tr>
+                      <th className="py-2.5 px-4">Defect</th>
+                      <th className="py-2.5 px-4">State</th>
+                      <th className="py-2.5 px-4">Road Segment</th>
+                      <th className="py-2.5 px-4 text-center">Sightings</th>
+                      <th className="py-2.5 px-4 text-center">Policy Score</th>
+                      <th className="py-2.5 px-4 text-right">Age</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {ageing.map((a) => (
+                      <tr
+                        key={a.defect_id}
+                        onClick={() => {
+                          const match = defects.find((d) => d.id === a.defect_id);
+                          if (match) setSelectedDefect(match);
+                        }}
+                        className="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 cursor-pointer transition-colors"
+                      >
+                        <td className="py-2.5 px-4 font-mono font-bold text-govBlue dark:text-blue-400">#{a.defect_id}</td>
+                        <td className="py-2.5 px-4">
+                          <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                            a.state === 'CONFIRMED'
+                              ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+                              : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+                          }`}>
+                            {a.state}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-4 text-gray-700 dark:text-gray-300">
+                          {a.segment_name || (a.segment_id ? `Segment #${a.segment_id}` : 'Unmatched location')}
+                        </td>
+                        <td className="py-2.5 px-4 text-center font-semibold text-gray-700 dark:text-gray-300">
+                          {a.repeat_sighting_count}
+                        </td>
+                        <td className="py-2.5 px-4 text-center font-mono text-gray-600 dark:text-gray-400">
+                          {a.policy_score} / {a.notice_threshold}
+                        </td>
+                        <td className={`py-2.5 px-4 text-right font-bold font-mono ${
+                          a.age_days >= 7 ? 'text-red-600' : a.age_days >= 3 ? 'text-amber-600' : 'text-gray-500'
+                        }`}>
+                          {a.age_days >= 1 ? `${a.age_days}d` : `${a.age_hours}h`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Main 2-Column Interface */}
@@ -522,6 +716,18 @@ const EngineerReview: React.FC = () => {
                       </>
                     )}
 
+                    {/* False positive escape hatch — engineers only, and never on a
+                        CLOSED defect, which is part of the compliance record. */}
+                    {selectedDefect.state !== 'CLOSED' && role === 'ENGINEER' && (
+                      <button
+                        onClick={() => setDeleteTarget(selectedDefect.id)}
+                        title="Remove this defect if the detection was a false positive"
+                        className="px-4 py-2.5 rounded-xl font-bold text-xs bg-white dark:bg-gray-800 border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-1.5"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Delete (False Positive)
+                      </button>
+                    )}
+
                     {/* CLOSED -> View Comparison */}
                     {selectedDefect.state === 'CLOSED' && (
                       <button
@@ -549,7 +755,7 @@ const EngineerReview: React.FC = () => {
       <AnimatePresence>
         {noticeModalOpen && noticePayload && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 space-y-4 border border-gray-200 dark:border-gray-700 shadow-2xl">
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-white dark:bg-gray-800 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 border border-gray-200 dark:border-gray-700 shadow-2xl">
               <div className="flex justify-between items-center pb-3 border-b border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-2">
                   <FileText className="w-5 h-5 text-purple-600" />
@@ -558,12 +764,81 @@ const EngineerReview: React.FC = () => {
                 <button onClick={() => setNoticeModalOpen(false)} className="text-gray-400 hover:text-gray-600">✕</button>
               </div>
 
-              <div className="bg-gray-900 text-gray-100 p-4 rounded-xl font-mono text-xs overflow-x-auto whitespace-pre-wrap">
-                {noticePayload.notice_text}
+              {/* Rendered as a letter on paper rather than a terminal dump: this is a
+                  formal complaint an engineer may print, sign and file. */}
+              <div className="bg-white text-gray-900 rounded-xl border border-gray-300 shadow-inner overflow-hidden">
+                {/* Letterhead */}
+                <div className="px-6 pt-6 pb-4 border-b-4 border-double border-gray-800">
+                  <div className="text-[15px] font-bold tracking-wide leading-snug">
+                    STATE INDUSTRIAL DEVELOPMENT CORPORATION (SIDC / MIDC)
+                  </div>
+                  <div className="text-[11px] text-gray-600 mt-0.5">
+                    Pune Division &middot; Road Defect Monitoring Cell
+                  </div>
+                  <div className="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-[11px]">
+                    <span><span className="text-gray-500">Ref</span>{' '}
+                      <span className="font-semibold">{noticePayload.notice_ref}</span></span>
+                    <span><span className="text-gray-500">Severity</span>{' '}
+                      <span className={`font-semibold ${
+                        noticePayload.severity_label === 'CRITICAL' ? 'text-red-600'
+                        : noticePayload.severity_label === 'MAJOR' ? 'text-orange-600'
+                        : 'text-amber-600'}`}>
+                        {noticePayload.severity_label || '—'}
+                      </span></span>
+                    <span><span className="text-gray-500">Deadline</span>{' '}
+                      <span className="font-semibold">
+                        {noticePayload.sla_due_at
+                          ? new Date(noticePayload.sla_due_at).toLocaleString()
+                          : '—'}
+                      </span></span>
+                  </div>
+                </div>
+
+                {/* Body of the complaint, in a serif face so it reads as a document */}
+                <div className="px-6 py-5 max-h-[45vh] overflow-y-auto">
+                  <pre className="whitespace-pre-wrap break-words font-serif text-[12.5px] leading-relaxed text-gray-800">
+{noticePayload.notice_text}
+                  </pre>
+
+                  {/* Photographic evidence, shown inline so the reviewer sees the
+                      defect the complaint is about without leaving the dialog. */}
+                  {noticePayload.before_photo_url &&
+                    String(noticePayload.before_photo_url).startsWith('http') && (
+                    <div className="mt-5 pt-4 border-t border-gray-200">
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-700 uppercase tracking-wide">
+                        <ImageIcon className="w-3.5 h-3.5" /> Photographic Evidence
+                      </div>
+                      <img
+                        src={noticePayload.before_photo_url}
+                        alt={`Annotated defect for ${noticePayload.notice_ref}`}
+                        className="mt-2 rounded-lg border border-gray-300 max-h-72 w-auto"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                      />
+                      {noticePayload.map_pin_url && (
+                        <a href={noticePayload.map_pin_url} target="_blank" rel="noreferrer"
+                           className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:underline">
+                          <MapPin className="w-3.5 h-3.5" /> Open location in Maps
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-2">
                 <button onClick={() => setNoticeModalOpen(false)} className="px-4 py-2 text-xs font-bold rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">Close</button>
+                <button
+                  onClick={handleDownloadNotice}
+                  className="px-4 py-2 text-xs font-bold rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center gap-1.5 hover:bg-gray-200 dark:hover:bg-gray-600"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download
+                </button>
+                <button
+                  onClick={handlePrintNotice}
+                  className="px-4 py-2 text-xs font-bold rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center gap-1.5 hover:bg-gray-200 dark:hover:bg-gray-600"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Print / PDF
+                </button>
                 <button
                   onClick={() => handleSendNotice(noticePayload.defect_id)}
                   disabled={role !== 'ENGINEER'}
@@ -572,6 +847,59 @@ const EngineerReview: React.FC = () => {
                   }`}
                 >
                   <Send className="w-3.5 h-3.5" /> Dispatch Notice to Contractor
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete confirmation — in-app rather than window.confirm, which renders as
+          a browser dialog captioned with the ngrok hostname. */}
+      <AnimatePresence>
+        {deleteTarget !== null && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => !isDeleting && setDeleteTarget(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full p-6 space-y-4 border border-gray-200 dark:border-gray-700 shadow-2xl"
+            >
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-xl bg-red-50 dark:bg-red-900/20 shrink-0">
+                  <Trash2 className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-gray-900 dark:text-white">
+                    Delete Defect #{deleteTarget}?
+                  </h3>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
+                    Use this for a false positive — a clean stretch of road wrongly flagged
+                    as a pothole. The defect, its liability verdict and any repair records
+                    are removed. The raw camera sightings are kept but detached.
+                  </p>
+                  <p className="text-xs font-bold text-red-600 mt-2">This cannot be undone.</p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-1">
+                <button
+                  onClick={() => setDeleteTarget(null)}
+                  disabled={isDeleting}
+                  className="px-4 py-2 text-xs font-bold rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDeleteDefect(deleteTarget)}
+                  disabled={isDeleting}
+                  className="px-5 py-2 text-xs font-bold rounded-xl bg-red-600 hover:bg-red-700 text-white flex items-center gap-1.5 shadow disabled:opacity-60"
+                >
+                  {isDeleting
+                    ? <><Loader className="w-3.5 h-3.5 animate-spin" /> Deleting…</>
+                    : <><Trash2 className="w-3.5 h-3.5" /> Delete Defect</>}
                 </button>
               </div>
             </motion.div>

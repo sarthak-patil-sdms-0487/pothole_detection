@@ -1,40 +1,56 @@
 .notification-container {
   position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 1000;
+  top: 16px;
+  right: 16px;
+  left: 16px;               /* full width on a phone; the max-width below pins it right on desktop */
+  margin-left: auto;
+  max-width: 420px;
+  z-index: 9999;            /* above modals, which sit at z-50 */
   display: flex;
   flex-direction: column;
   gap: 10px;
+  pointer-events: none;     /* never block taps on the page underneath */
 }
 
 .notification {
-  padding: 15px;
-  border-radius: 5px;
-  color: white;
+  pointer-events: auto;
+  padding: 12px 14px;
+  border-radius: 12px;
+  color: #fff;
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  min-width: 250px;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 600;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, .3), 0 8px 10px -6px rgba(0, 0, 0, .2);
+  word-break: break-word;   /* long refs and email addresses must not overflow */
+  animation: notification-in .22s ease-out;
 }
 
-.notification.success {
-  background-color: #4CAF50;
+@keyframes notification-in {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-.notification.error {
-  background-color: #f44336;
-}
-
-.notification.info {
-  background-color: #2196F3;
-}
+.notification.success { background-color: #0f9d58; }
+.notification.error   { background-color: #d93025; }
+.notification.info    { background-color: #1a73e8; }
 
 .notification button {
   background: none;
   border: none;
-  color: white;
-  font-size: 20px;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
   cursor: pointer;
-  margin-left: 15px;
+  opacity: .8;
+  flex-shrink: 0;
+}
+
+.notification button:hover { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .notification { animation: none; }
 }

@@ -6,7 +6,7 @@ const navItems = [
   { name: 'Home', href: '/', icon: Home },
   { name: 'Drive AI', href: '/drive', icon: Video },
   { name: 'Report', href: '/report', icon: AlertCircle },
-  { name: 'Reports', href: '/reports', icon: FileText },
+  { name: 'My Reports', href: '/my-reports', icon: FileText },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
 ];
 

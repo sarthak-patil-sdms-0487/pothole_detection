@@ -129,6 +129,58 @@ async def get_defect(defect_id: int, db: Session) -> defect_dto.DefectResponse:
         raise HTTPException(status_code=404, detail="Defect not found")
     return format_defect_response(d, db)
 
+async def delete_defect(defect_id: int, actor: str, db: Session) -> Dict[str, Any]:
+    """
+    Remove a defect and everything hanging off it. Used to discard false
+    positives — the detector occasionally boxes a clean stretch of road, and
+    those must not sit in the queue or reach a contractor as a complaint.
+    """
+    if str(actor).upper() != "ENGINEER":
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: Only SIDC Engineers can delete a defect."
+        )
+
+    d = db.query(Defect).filter(Defect.id == defect_id).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Defect not found")
+
+    if d.state == "CLOSED":
+        raise HTTPException(
+            status_code=409,
+            detail="Closed defects are part of the compliance record and cannot be deleted."
+        )
+
+    # Audit before the row disappears, so the deletion itself stays on record.
+    record_audit(
+        db=db,
+        entity="defect",
+        entity_id=defect_id,
+        actor=actor,
+        action="delete_defect",
+        from_status=d.state,
+        to_status="DELETED",
+        note=f"Defect #{defect_id} deleted as a false positive by {actor}"
+    )
+
+    # Children first — reports are detached rather than dropped so the raw
+    # sighting history survives; everything else belongs to the defect alone.
+    reports = db.query(Report).filter(Report.defect_id == defect_id).all()
+    for r in reports:
+        r.defect_id = None
+    db.query(Evidence).filter(Evidence.defect_id == defect_id).delete(synchronize_session=False)
+    db.query(LiabilityVerdict).filter(LiabilityVerdict.defect_id == defect_id).delete(synchronize_session=False)
+    db.query(RepairJob).filter(RepairJob.defect_id == defect_id).delete(synchronize_session=False)
+
+    db.delete(d)
+    db.commit()
+
+    return {
+        "deleted": True,
+        "defect_id": defect_id,
+        "detached_sightings": len(reports),
+    }
+
 async def manual_notice_defect(defect_id: int, actor: str, db: Session) -> defect_dto.DefectResponse:
     if str(actor).upper() != "ENGINEER":
         raise HTTPException(

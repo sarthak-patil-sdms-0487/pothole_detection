@@ -4,15 +4,6 @@ from PIL import Image
 from google import genai
 from ..config.settings import get_settings
 
-settings = get_settings()
-
-GEMINI_API_KEY = settings.gemini_api_key
-
-if not GEMINI_API_KEY:
-    raise ValueError("GEMINI_API_KEY not found in environment variables")
-
-client = genai.Client(api_key=GEMINI_API_KEY)
-
 MODEL_NAME = "gemini-3.1-flash-lite"
 
 DETECT_PROMPT = """You are an expert road-damage inspector analyzing a photo for potholes.
@@ -41,8 +32,33 @@ Respond ONLY with valid JSON, no other text, in this exact format:
 If there are no real potholes, respond: {"potholes": []}
 """
 
+_client = None
+
+
+def get_client():
+    """
+    Builds the Gemini client on first use.
+
+    This used to run at import time and raise when GEMINI_API_KEY was unset,
+    which took the whole API down on boot — including the YOLO detection path
+    and every endpoint that has nothing to do with Gemini. The key is now only
+    required by callers that actually reach this service.
+    """
+    global _client
+    if _client is None:
+        api_key = get_settings().gemini_api_key
+        if not api_key:
+            raise RuntimeError(
+                "GEMINI_API_KEY is not configured; the Gemini detection method is unavailable. "
+                "Use the YOLO detection method, or set GEMINI_API_KEY in backend/.env."
+            )
+        _client = genai.Client(api_key=api_key)
+    return _client
+
+
 def detect_with_gemini(pil_image: Image.Image):
     try:
+        client = get_client()
         response = client.models.generate_content(
             model=MODEL_NAME,
             contents=[DETECT_PROMPT, pil_image]

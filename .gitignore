@@ -11,9 +11,11 @@ __pycache__/
 .venv/
 *.egg-info/
 
-# Environment
+# Environment — every variant, including backups. A .env.bak once carried a
+# live API key into a commit and GitHub's push protection rejected the push.
 .env
-.env.local
+.env.*
+!.env.example
 
 # Database
 *.db
@@ -21,6 +23,8 @@ __pycache__/
 # Build output
 dist/
 build/
+*.tsbuildinfo
+frontend/vite.config.js
 
 # Uploads
 uploads/
@@ -36,3 +40,6 @@ uploads/
 
 # YOLO model files (large binaries)
 # backend/src/models/*.pt
+
+# Local run logs
+logs/

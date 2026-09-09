@@ -1,11 +1,11 @@
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Filter, Loader, AlertTriangle, Clock, ShieldCheck, MapPin, ExternalLink } from 'lucide-react';
+import { Filter, Loader, AlertTriangle, Clock, ExternalLink } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { API_BASE_URL } from '../config';
-import { useAuthStore } from '../store/authStore';
+import { useAuthStore, authFetch } from '../store/authStore';
 
 // Fix Leaflet icons
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -32,24 +32,6 @@ interface Defect {
     original_image_url: string;
   }[];
 }
-
-const blueIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
-
-const violetIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-violet.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
 
 const orangeIcon = new L.Icon({
   iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
@@ -92,9 +74,7 @@ const MapPage = () => {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${API_BASE_URL}/api/defects`, {
-          headers: { 'X-Role': role }
-        });
+        const res = await authFetch(`${API_BASE_URL}/api/defects`);
         if (!res.ok) throw new Error('Failed to fetch defect spatial data');
         const data: Defect[] = await res.json();
         setDefects(data.filter(d => d.sightings.length > 0 && d.sightings[0].lat && d.sightings[0].lng));
@@ -144,7 +124,11 @@ const getDefectIcon = (d: Defect) => {
           </select>
         </div>
         {loading && <Loader className="w-4 h-4 animate-spin text-govBlue" />}
-        {error && <AlertTriangle className="w-4 h-4 text-red-500" title={error} />}
+        {error && (
+          <span title={error} className="inline-flex">
+            <AlertTriangle className="w-4 h-4 text-red-500" />
+          </span>
+        )}
       </div>
 
       <MapContainer center={mapCenter} zoom={14} className="h-full w-full z-0" zoomControl={false}>

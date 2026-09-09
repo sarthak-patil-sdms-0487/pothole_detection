@@ -25,6 +25,14 @@ async def get_defect_route(
 ):
     return await defect_controller.get_defect(defect_id, db)
 
+@router.delete("/defects/{defect_id}", response_model=Dict[str, Any])
+async def delete_defect_route(
+    defect_id: int,
+    role: str = Depends(get_current_role),
+    db: Session = Depends(get_db)
+):
+    return await defect_controller.delete_defect(defect_id, role, db)
+
 @router.post("/defects/{defect_id}/notice", response_model=defect_dto.DefectResponse)
 async def manual_notice_defect_route(
     defect_id: int,

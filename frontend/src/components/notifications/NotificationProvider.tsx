@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useCallback, useRef, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback, useRef } from 'react';
 import Notification from './Notification';
 
 interface NotificationState {
@@ -8,7 +8,11 @@ interface NotificationState {
 }
 
 interface NotificationContextType {
-  addNotification: (message: string, type: 'success' | 'error' | 'info') => void;
+  addNotification: (
+    message: string,
+    type: 'success' | 'error' | 'info',
+    durationMs?: number
+  ) => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -35,7 +39,11 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     );
   };
 
-  const addNotification = useCallback((message: string, type: 'success' | 'error' | 'info') => {
+  const addNotification = useCallback((
+    message: string,
+    type: 'success' | 'error' | 'info',
+    durationMs?: number
+  ) => {
     const id = notificationId.current++;
     const newNotification: NotificationState = {
       id,
@@ -44,15 +52,18 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     };
     setNotifications(prevNotifications => [...prevNotifications, newNotification]);
 
+    // Errors and longer confirmations need reading time; 2s was too short to
+    // take in a dispatch result that names a reference and a recipient.
+    const ttl = durationMs ?? (type === 'error' ? 7000 : 5000);
     setTimeout(() => {
       removeNotification(id);
-    }, 2000);
+    }, ttl);
   }, []);
 
   return (
     <NotificationContext.Provider value={{ addNotification }}>
       {children}
-      <div className="notification-container hidden sm:block">
+      <div className="notification-container">
         {notifications.map(notification => (
           <Notification
             key={notification.id}

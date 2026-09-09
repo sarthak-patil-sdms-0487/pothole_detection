@@ -44,14 +44,28 @@ class TestTask8ContractorNotices(unittest.TestCase):
         notice = res_get_notice.json()
 
         self.assertIn("notice_ref", notice)
-        self.assertIn("MIDC/NOT/2026/", notice["notice_ref"])
+        self.assertIn("SIDC/NOT/2026/", notice["notice_ref"])
         self.assertEqual(notice["contractor_name"], "B.G. Shirke Construction Technology Pvt Ltd")
         self.assertEqual(notice["contractor_email"], "contracts@bgshirke.com")
         self.assertEqual(notice["tender_ref"], "MIDC/EE/PUNE/2024/TR-01")
         self.assertEqual(notice["verdict"], "IN_WARRANTY")
         self.assertEqual(notice["statutory_deadline_hours"], 48)
         self.assertIn("NOTICE UNDER ROAD WORK DEFECT LIABILITY PERIOD", notice["legal_hedge"])
-        self.assertIn("STATUTORY REPAIR DIRECTIVE", notice["notice_text"])
+
+        # The notice is written as a complaint addressed to the contractor, so it
+        # must name them, say what is wrong, prove it, and state the deadline.
+        body = notice["notice_text"]
+        self.assertIn("COMPLAINT: Pavement failure", body)
+        self.assertIn("B.G. Shirke Construction Technology Pvt Ltd", body)
+        self.assertIn("WHAT YOU MUST DO", body)
+        self.assertIn("DEADLINE", body)
+        self.assertIn(notice["notice_ref"], body)
+        self.assertIn("MIDC/EE/PUNE/2024/TR-01", body)
+        # Delivery goes to the override inbox while testing; the contractor's own
+        # address stays on the record either way.
+        self.assertEqual(notice["contractor_email"], "contracts@bgshirke.com")
+        self.assertIn("@", notice["recipient_email"])
+        self.assertIn("action required within 48 hours", notice["subject"])
 
     def test_automatic_and_manual_notice_dispatch(self):
         # 1. Defect explicitly on Segment 4 (Ashoka Buildcon)

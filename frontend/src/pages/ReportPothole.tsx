@@ -25,7 +25,7 @@ const ReportPothole = () => {
   const [tiltAngle, setTiltAngle] = useState('45');
   const [fovVertical, setFovVertical] = useState('55');
   const [fovHorizontal, setFovHorizontal] = useState('65');
-  const [confThreshold, setConfThreshold] = useState('0.2');
+  const [confThreshold, setConfThreshold] = useState('0.35');
 
   useEffect(() => {
     // Attempt to get location automatically on load

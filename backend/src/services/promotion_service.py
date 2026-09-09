@@ -74,6 +74,12 @@ def calculate_policy_score(db: Session, defect: Defect, config: Dict[str, Any]) 
     )
     return round(score, 3)
 
+# Promotions that count as a human bringing the defect to notice. Only these
+# dispatch the statutory notice to the contractor; policy-driven promotions start
+# the clock and attach the verdict, but leave dispatch to an engineer.
+HUMAN_NOTICE_REASONS = {"engineer_accept"}
+
+
 def promote(
     db: Session,
     defect: Defect,
@@ -106,11 +112,24 @@ def promote(
             defect.sla_due_at = now + datetime.timedelta(hours=48)
             defect.breach_flag = False
 
-        # Automatically evaluate contractor warranty & liability on entering NOTICED
+        # Always evaluate contractor warranty & liability on entering NOTICED.
+        #
+        # Dispatching the statutory notice is deliberately narrower. Issuing a
+        # notice to a contractor is an outward-facing legal act, and the staged-
+        # notice design holds that it is a human, policy-governed decision. So the
+        # policy engine may start the 48h clock on its own, but only an engineer
+        # accepting the defect dispatches. Everything else waits for the engineer
+        # to call POST /defects/{id}/notice/send.
         try:
             verdict_rec = evaluate_liability(db, defect.id)
-            if verdict_rec and verdict_rec.verdict == "IN_WARRANTY":
+            is_human_notice = reason in HUMAN_NOTICE_REASONS
+            if verdict_rec and verdict_rec.verdict == "IN_WARRANTY" and is_human_notice:
                 notice_service.send_notice(db, defect.id, force=False, actor=actor)
+            elif verdict_rec and verdict_rec.verdict == "IN_WARRANTY":
+                logger.info(
+                    f"[PROMOTION] Defect #{defect.id} auto-promoted to NOTICED via '{reason}'. "
+                    f"Clock started; contractor notice held for engineer dispatch."
+                )
         except Exception as e:
             logger.error(f"[PROMOTION] Liability / Notice dispatch error on Defect #{defect.id}: {e}")
 

@@ -1,0 +1,17 @@
+version: "3"
+# Public tunnel for the SIDC Road / pothole stack.
+#
+# ONE tunnel only. The free ngrok plan issues a single public domain, so a second
+# tunnel binds to that same domain and requests get load-balanced at random
+# between the two upstreams — which silently breaks roughly half of them.
+#
+# MinIO is therefore not tunnelled directly. The vite dev server proxies
+# /pothole-images to it (see frontend/vite.config.ts), so detection images are
+# served from the app's own origin. That also means the ngrok browser-warning
+# interstitial only has to be accepted once, for everything.
+#
+# Start with:  ./run.sh --ngrok
+tunnels:
+  app:
+    proto: http
+    addr: 5173

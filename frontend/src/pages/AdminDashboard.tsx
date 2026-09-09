@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  FileText, 
   Plus, 
   Search, 
   Filter, 
@@ -10,16 +9,14 @@ import {
   Edit3, 
   Trash2, 
   ExternalLink, 
-  MapPin, 
-  Sparkles, 
   CheckCircle2, 
   X, 
-  Calendar,
   IndianRupee,
   Layers
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL } from '../config';
+import { authFetch } from '../store/authStore';
 
 interface SegmentBrief {
   id: number;
@@ -80,20 +77,18 @@ const AdminDashboard: React.FC = () => {
     setLoading(true);
     try {
       const [tendersRes, segmentsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/tenders`, { headers: { 'X-Role': 'ENGINEER' } }),
-        fetch(`${API_BASE_URL}/api/tenders/segments`, { headers: { 'X-Role': 'ENGINEER' } })
+        authFetch(`${API_BASE_URL}/api/tenders`),
+        authFetch(`${API_BASE_URL}/api/tenders/segments`)
       ]);
 
-      if (tendersRes.ok) {
-        const tData = await tendersRes.json();
-        setTenders(tData);
+      if (!tendersRes.ok || !segmentsRes.ok) {
+        throw new Error('Could not load the tender register from the server.');
       }
-      if (segmentsRes.ok) {
-        const sData = await segmentsRes.json();
-        setSegments(sData);
-      }
+      setTenders(await tendersRes.json());
+      setSegments(await segmentsRes.json());
     } catch (err: any) {
       console.error('Failed to load tenders or segments:', err);
+      setStatusMessage({ type: 'error', text: err.message || 'Failed to load tender register.' });
     } finally {
       setLoading(false);
     }
@@ -160,9 +155,9 @@ const AdminDashboard: React.FC = () => {
         ? `${API_BASE_URL}/api/tenders/${editingTender.id}`
         : `${API_BASE_URL}/api/tenders`;
       
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method: editingTender ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Role': 'ENGINEER' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
@@ -186,16 +181,17 @@ const AdminDashboard: React.FC = () => {
   const handleDeleteTender = async (id: number) => {
     if (!window.confirm('Are you sure you want to delete this tender contract record?')) return;
 
+    setStatusMessage(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/tenders/${id}`, {
-        method: 'DELETE',
-        headers: { 'X-Role': 'ENGINEER' }
-      });
-      if (res.ok) {
-        setTenders((prev) => prev.filter((t) => t.id !== id));
+      const res = await authFetch(`${API_BASE_URL}/api/tenders/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        throw new Error(`Failed to delete tender. Server returned ${res.status}`);
       }
-    } catch (err) {
+      setTenders((prev) => prev.filter((t) => t.id !== id));
+      setStatusMessage({ type: 'success', text: 'Tender contract deleted.' });
+    } catch (err: any) {
       console.error('Delete failed:', err);
+      setStatusMessage({ type: 'error', text: err.message || 'Delete failed.' });
     }
   };
 
@@ -227,11 +223,11 @@ const AdminDashboard: React.FC = () => {
   const totalValueCr = (tenders.reduce((acc, t) => acc + (t.value_inr || 0), 0) / 10000000).toFixed(2);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 pb-12">
+    <div className="w-full min-w-0 space-y-6 pb-12">
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
-        <div>
-          <div className="flex items-center gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 border border-purple-200 dark:border-purple-800 flex items-center gap-1">
               <Building2 className="w-3 h-3" /> Contractor Compliance Register
             </span>
@@ -246,7 +242,7 @@ const AdminDashboard: React.FC = () => {
 
         <button
           onClick={openCreateModal}
-          className="px-5 py-3 rounded-xl font-bold bg-govBlue hover:bg-blue-700 text-white flex items-center gap-2 shadow-md transition-all active:scale-95 self-start md:self-auto"
+          className="px-5 py-3 rounded-xl font-bold bg-govBlue hover:bg-blue-700 text-white flex items-center gap-2 shadow-md transition-all active:scale-95 self-start md:self-auto shrink-0 whitespace-nowrap"
         >
           <Plus className="w-4 h-4" /> Add Tender Contract
         </button>
@@ -356,8 +352,8 @@ const AdminDashboard: React.FC = () => {
           <div className="text-center py-16 text-gray-400">No tender contracts found matching criteria.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-gray-50 dark:bg-gray-900/60 text-gray-500 dark:text-gray-400 font-semibold border-b border-gray-200 dark:border-gray-700 text-xs">
+            <table className="w-full min-w-[1040px] text-left text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-900/60 text-gray-500 dark:text-gray-400 font-semibold border-b border-gray-200 dark:border-gray-700 text-xs whitespace-nowrap">
                 <tr>
                   <th className="py-3 px-4">Tender Reference</th>
                   <th className="py-3 px-4">Contractor</th>
@@ -366,13 +362,14 @@ const AdminDashboard: React.FC = () => {
                   <th className="py-3 px-4">DLP Expiry</th>
                   <th className="py-3 px-4">Value (₹)</th>
                   <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">DLP Clause &amp; Source</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {filteredTenders.map((t) => (
                   <tr key={t.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors">
-                    <td className="py-3.5 px-4 font-mono font-bold text-govBlue dark:text-blue-400">
+                    <td className="py-3.5 px-4 font-mono font-bold text-govBlue dark:text-blue-400 whitespace-nowrap">
                       {t.tender_ref || `TND-${t.id}`}
                     </td>
                     <td className="py-3.5 px-4">
@@ -395,10 +392,10 @@ const AdminDashboard: React.FC = () => {
                         <span className="text-xs text-gray-400 italic">No segments mapped</span>
                       )}
                     </td>
-                    <td className="py-3.5 px-4 text-xs text-gray-600 dark:text-gray-300">
+                    <td className="py-3.5 px-4 text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">
                       {t.completion_date || 'N/A'}
                     </td>
-                    <td className="py-3.5 px-4 font-mono text-xs">
+                    <td className="py-3.5 px-4 font-mono text-xs whitespace-nowrap">
                       <span className={t.is_active_dlp ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-gray-400'}>
                         {t.dlp_expiry_date || 'N/A'}
                       </span>
@@ -408,13 +405,37 @@ const AdminDashboard: React.FC = () => {
                     </td>
                     <td className="py-3.5 px-4">
                       {t.is_active_dlp ? (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 inline-flex items-center gap-1">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 inline-flex items-center gap-1 whitespace-nowrap">
                           <ShieldCheck className="w-3 h-3" /> In Warranty
                         </span>
                       ) : (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 whitespace-nowrap">
                           Expired
                         </span>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4 max-w-xs">
+                      {t.dlp_source ? (
+                        <p
+                          className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2"
+                          title={t.dlp_source}
+                        >
+                          {t.dlp_source}
+                        </p>
+                      ) : (
+                        <span className="text-xs text-gray-400 italic">Clause not recorded</span>
+                      )}
+                      {t.source_url ? (
+                        <a
+                          href={t.source_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-govBlue dark:text-blue-400 hover:underline"
+                        >
+                          <ExternalLink className="w-3 h-3" /> MahaTenders record
+                        </a>
+                      ) : (
+                        <span className="mt-1 block text-[11px] text-gray-400 italic">No source URL</span>
                       )}
                     </td>
                     <td className="py-3.5 px-4 text-right">

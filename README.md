@@ -1,97 +1,96 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# SIDC Road Defect Liability & Compliance Ledger
 
-# Getting Started
+**PS1 — Smart Pothole Detection & Repair.** Client: SIDC (State Industrial Development
+Corporation), modelled on MIDC Maharashtra.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+SIDC does not have a pothole *detection* problem. It has an **attribution and closure**
+problem: when a defect appears on an estate road, who is contractually liable, is the road
+still inside a Defect Liability Period, who owes the repair, and can we prove it was fixed in
+time? This repo is the ledger that answers those questions and enforces the 48-hour clock.
 
-## Step 1: Start Metro
+> This is an operational compliance tool, not legal advice. Every liability verdict is worded
+> as a **probable match, to be verified against the tender documents**.
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+## The staged-notice model
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+A continuous detector is a liability generator, so defects move through three states with
+different legal weight. Only the last one starts the statutory clock.
 
-```sh
-# Using npm
-npm start
+| State | Created by | 48h clock |
+|---|---|---|
+| `SIGHTING` | opportunistic capture from any vehicle | no |
+| `CONFIRMED` | repeat sightings in a geofence, a survey pass, or a worker report | no |
+| `NOTICED` | engineer accepts into the queue, or the published policy threshold is crossed | **yes** |
 
-# OR using Yarn
-yarn start
+Sightings are never deleted, ageing unpromoted sightings are surfaced on the engineer screen,
+the promotion policy is published config rather than a per-user choice, and every transition is
+written to `audit_log`.
+
+## Stack
+
+Single FastAPI service + Postgres, and a Vite/React frontend. Two roles (`SURVEYOR`,
+`ENGINEER`) carried on an `X-Role` header. Monolith, one repo.
+
+```
+backend/    FastAPI. routes -> controllers -> services -> schemas (SQLAlchemy + Pydantic)
+frontend/   Vite + React + Tailwind
 ```
 
-## Step 2: Build and run your app
+## Running it
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+**Backend**
 
-### Android
+```bash
+cd backend
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cp .env.example .env          # set DATABASE_URL, GEMINI_API_KEY
+docker compose up -d          # Postgres on 5434, from the repo root
 
-```sh
-# Using npm
-npm run android
+.venv/bin/python src/scripts/migrate_v2_schema.py   # create/patch tables
+.venv/bin/python src/scripts/load_segments.py       # 30-segment gazetteer
+.venv/bin/python src/scripts/seed_tenders.py        # tender + DLP register
+.venv/bin/python src/scripts/seed_slag.py           # slag ledger
+.venv/bin/python src/scripts/seed_demo_scenarios.py # demo defects
 
-# OR using Yarn
-yarn android
+.venv/bin/uvicorn main:app --reload
 ```
 
-### iOS
+**Frontend**
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
+```bash
+cd frontend
+npm install
+npm run dev      # set VITE_API_URL if the API is not same-origin
 ```
 
-Then, and every time you update your native dependencies, run:
+**Tests**
 
-```sh
-bundle exec pod install
+```bash
+cd backend && .venv/bin/python -m pytest tests/ -q
 ```
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+Tests run against a disposable SQLite database created fresh each session, never your dev
+Postgres. Point them elsewhere with `TEST_DATABASE_URL`.
 
-```sh
-# Using npm
-npm run ios
+## Modules
 
-# OR using Yarn
-yarn ios
-```
+| | |
+|---|---|
+| **M1** Intake | Opportunistic capture (`/drive`), scheduled survey runs, worker reports (`/report`) |
+| **M2** Detector | Off-the-shelf YOLO server-side; sightings deduped within 15 m |
+| **M3** Gazetteer | 30 GeoJSON segments; nearest-linestring matching in UTM 43N |
+| **M4** Tender & DLP register | `/admin` — tenders, DLP expiry, clause source, segment mapping |
+| **M5** Liability + SLA | Verdicts, config-driven promotion policy, 48h clock, before/after evidence |
+| **M6** Slag ledger | Tenant unit → stockpile → draw → repaired segment, on `/analytics` |
+| **M7** Engineer dashboard | `/review` queue + ageing sightings, `/work-orders` repair queue, `/map`, `/analytics` contractor rollup |
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+## Notes
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+- The detector is deliberately not tuned. Humans gate promotion, so the system is designed to
+  be correct under a mediocre detector.
+- Tender records are hand-curated from MahaTenders. DLP terms usually live inside the tender
+  PDF rather than the award record — `data/extracted_dlp_samples.json` demonstrates LLM
+  extraction on sample documents.
+- `NOTIFY_CONTRACTORS_LIVE=False` keeps contractor notices in simulated mode. Notices are only
+  dispatched automatically when an **engineer** accepts a defect; policy-driven promotions
+  start the clock but leave dispatch to a human.

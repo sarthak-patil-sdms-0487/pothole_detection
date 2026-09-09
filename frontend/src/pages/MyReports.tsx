@@ -22,13 +22,21 @@ const getStatusColor = (status: string) => {
   }
 };
 
+interface MyReport {
+  id: number;
+  address: string;
+  status: string;
+  severity: string;
+  reportedDate: string;
+}
+
 const MyReports = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [reports, setReports] = useState([]);
-  const [filteredReports, setFilteredReports] = useState([]);
+  const [reports, setReports] = useState<MyReport[]>([]);
+  const [filteredReports, setFilteredReports] = useState<MyReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [user, setUser] = useState({ name: 'Anonymous' }); // Mock user
+  const [user] = useState({ name: 'Anonymous' }); // Mock user
 
   useEffect(() => {
     const fetchMyReports = async () => {

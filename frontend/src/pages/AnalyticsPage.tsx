@@ -1,34 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  BarChart3, 
-  ShieldCheck, 
-  ShieldAlert, 
-  TrendingUp, 
   Building2, 
-  Clock, 
-  CheckCircle2, 
   IndianRupee, 
-  Layers, 
   Download,
   AlertOctagon,
   Percent,
   Recycle,
   Factory,
   Sparkles,
-  Loader,
-  ArrowDownRight
 } from 'lucide-react';
-import { motion } from 'framer-motion';
 import { API_BASE_URL } from '../config';
-import { useAuthStore } from '../store/authStore';
+import { authFetch } from '../store/authStore';
 
 interface ContractorScorecard {
+  tender_id: number;
   name: string;
   tender_ref: string;
+  contractor_email: string | null;
+  dlp_expiry_date: string | null;
   dlp_status: 'IN_WARRANTY' | 'EXPIRED';
+  defects_raised: number;
+  in_dlp_count: number;
   notices_issued: number;
   fixed_within_sla: number;
   sla_breaches: number;
+  open_count: number;
   compliance_rate: number;
   recoverable_cost_inr: number;
 }
@@ -65,108 +61,50 @@ interface SlagDraw {
 }
 
 const AnalyticsPage: React.FC = () => {
-  const { role } = useAuthStore();
   const [slagSummary, setSlagSummary] = useState<SlagSummary | null>(null);
   const [slagLots, setSlagLots] = useState<SlagLot[]>([]);
   const [slagDraws, setSlagDraws] = useState<SlagDraw[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
-  const scorecards: ContractorScorecard[] = [
-    {
-      name: 'B.G. Shirke Construction Technology Pvt Ltd',
-      tender_ref: 'MIDC/EE/PUNE/2024/TR-01',
-      dlp_status: 'IN_WARRANTY',
-      notices_issued: 8,
-      fixed_within_sla: 7,
-      sla_breaches: 1,
-      compliance_rate: 87.5,
-      recoverable_cost_inr: 45000
-    },
-    {
-      name: 'Ashoka Buildcon Ltd',
-      tender_ref: 'MAHA/PWD/PUNE/2023/W-108',
-      dlp_status: 'IN_WARRANTY',
-      notices_issued: 12,
-      fixed_within_sla: 12,
-      sla_breaches: 0,
-      compliance_rate: 100.0,
-      recoverable_cost_inr: 0
-    },
-    {
-      name: 'Supreme Infrastructure India Ltd',
-      tender_ref: 'MIDC/EE/PUNE/2021/TR-44',
-      dlp_status: 'EXPIRED',
-      notices_issued: 5,
-      fixed_within_sla: 2,
-      sla_breaches: 3,
-      compliance_rate: 40.0,
-      recoverable_cost_inr: 125000
-    },
-    {
-      name: 'Eagle Infra India Ltd',
-      tender_ref: 'MIDC/EE/CHAKAN/2024/RD-12',
-      dlp_status: 'IN_WARRANTY',
-      notices_issued: 6,
-      fixed_within_sla: 5,
-      sla_breaches: 1,
-      compliance_rate: 83.3,
-      recoverable_cost_inr: 38000
-    },
-    {
-      name: 'J. Kumar Infraprojects Ltd',
-      tender_ref: 'MIDC/EE/CHAKAN/2023/RD-88',
-      dlp_status: 'IN_WARRANTY',
-      notices_issued: 4,
-      fixed_within_sla: 4,
-      sla_breaches: 0,
-      compliance_rate: 100.0,
-      recoverable_cost_inr: 0
-    },
-    {
-      name: 'KNR Constructions Ltd',
-      tender_ref: 'MIDC/EE/CHAKAN/2024/CT-04',
-      dlp_status: 'IN_WARRANTY',
-      notices_issued: 9,
-      fixed_within_sla: 8,
-      sla_breaches: 1,
-      compliance_rate: 88.9,
-      recoverable_cost_inr: 62000
-    }
-  ];
+  const [scorecards, setScorecards] = useState<ContractorScorecard[]>([]);
 
   useEffect(() => {
-    const fetchSlagData = async () => {
+    const fetchAnalytics = async () => {
       setLoading(true);
       try {
-        const [sumRes, lotsRes, drawsRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/slag/summary`),
-          fetch(`${API_BASE_URL}/api/slag/lots`),
-          fetch(`${API_BASE_URL}/api/slag/draws`)
+        const [sumRes, lotsRes, drawsRes, scoreRes] = await Promise.all([
+          authFetch(`${API_BASE_URL}/api/slag/summary`),
+          authFetch(`${API_BASE_URL}/api/slag/lots`),
+          authFetch(`${API_BASE_URL}/api/slag/draws`),
+          authFetch(`${API_BASE_URL}/api/stats/contractors`)
         ]);
 
         if (sumRes.ok) setSlagSummary(await sumRes.json());
         if (lotsRes.ok) setSlagLots(await lotsRes.json());
         if (drawsRes.ok) setSlagDraws(await drawsRes.json());
+        if (scoreRes.ok) setScorecards(await scoreRes.json());
       } catch (err) {
-        console.error('Failed to load slag analytics:', err);
+        console.error('Failed to load analytics:', err);
       } finally {
         setLoading(false);
       }
     };
-    fetchSlagData();
+    fetchAnalytics();
   }, []);
 
   const totalNotices = scorecards.reduce((a, b) => a + b.notices_issued, 0);
   const totalBreaches = scorecards.reduce((a, b) => a + b.sla_breaches, 0);
   const totalRecoverable = scorecards.reduce((a, b) => a + b.recoverable_cost_inr, 0);
-  const avgCompliance = ((scorecards.reduce((a, b) => a + b.compliance_rate, 0) / scorecards.length)).toFixed(1);
+  const avgCompliance = scorecards.length
+    ? (scorecards.reduce((a, b) => a + b.compliance_rate, 0) / scorecards.length).toFixed(1)
+    : '0.0';
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-16">
+    <div className="w-full min-w-0 space-y-8 pb-16">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
-        <div>
-          <div className="flex items-center gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
               Contractor Scorecard & Circular Economy
             </span>
@@ -181,7 +119,7 @@ const AnalyticsPage: React.FC = () => {
 
         <button
           onClick={() => window.print()}
-          className="px-4 py-2.5 rounded-xl font-bold text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 flex items-center gap-2"
+          className="px-4 py-2.5 rounded-xl font-bold text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 flex items-center gap-2 shrink-0 whitespace-nowrap self-start sm:self-auto"
         >
           <Download className="w-4 h-4" /> Export Ledger (PDF)
         </button>
@@ -228,13 +166,23 @@ const AnalyticsPage: React.FC = () => {
 
         {/* Scorecard Table */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden p-6 space-y-4">
+          {loading ? (
+            <div className="text-center py-12 text-gray-500 text-sm">Loading contractor scorecards...</div>
+          ) : scorecards.length === 0 ? (
+            <div className="text-center py-12 text-gray-400 text-sm">
+              No defects have been attributed to a contract yet. Scorecards appear once defects on
+              tender-mapped segments receive a liability verdict.
+            </div>
+          ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-gray-50 dark:bg-gray-900/60 text-gray-500 dark:text-gray-400 font-semibold border-b border-gray-200 dark:border-gray-700 text-xs">
+            <table className="w-full min-w-[960px] text-left text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-900/60 text-gray-500 dark:text-gray-400 font-semibold border-b border-gray-200 dark:border-gray-700 text-xs whitespace-nowrap">
                 <tr>
                   <th className="py-3 px-4">Contractor</th>
                   <th className="py-3 px-4">Contract Ref</th>
                   <th className="py-3 px-4">DLP Status</th>
+                  <th className="py-3 px-4 text-center">Defects</th>
+                  <th className="py-3 px-4 text-center">Inside DLP</th>
                   <th className="py-3 px-4 text-center">Notices</th>
                   <th className="py-3 px-4 text-center">48h SLA Met</th>
                   <th className="py-3 px-4 text-center">Breaches</th>
@@ -244,11 +192,11 @@ const AnalyticsPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {scorecards.map((c) => (
-                  <tr key={c.tender_ref} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors text-xs">
-                    <td className="py-3.5 px-4 font-bold text-gray-900 dark:text-white">{c.name}</td>
-                    <td className="py-3.5 px-4 font-mono text-govBlue dark:text-blue-400">{c.tender_ref}</td>
+                  <tr key={c.tender_id} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors text-xs">
+                    <td className="py-3.5 px-4 font-bold text-gray-900 dark:text-white whitespace-nowrap">{c.name}</td>
+                    <td className="py-3.5 px-4 font-mono text-govBlue dark:text-blue-400 whitespace-nowrap">{c.tender_ref}</td>
                     <td className="py-3.5 px-4">
-                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] whitespace-nowrap ${
                         c.dlp_status === 'IN_WARRANTY'
                           ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'
                           : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
@@ -256,6 +204,8 @@ const AnalyticsPage: React.FC = () => {
                         {c.dlp_status === 'IN_WARRANTY' ? 'In Warranty' : 'Expired'}
                       </span>
                     </td>
+                    <td className="py-3.5 px-4 text-center font-bold text-gray-700 dark:text-gray-300">{c.defects_raised}</td>
+                    <td className="py-3.5 px-4 text-center font-bold text-govBlue dark:text-blue-400">{c.in_dlp_count}</td>
                     <td className="py-3.5 px-4 text-center font-bold text-gray-700 dark:text-gray-300">{c.notices_issued}</td>
                     <td className="py-3.5 px-4 text-center font-bold text-emerald-600">{c.fixed_within_sla}</td>
                     <td className="py-3.5 px-4 text-center font-bold text-red-600">{c.sla_breaches}</td>
@@ -278,6 +228,11 @@ const AnalyticsPage: React.FC = () => {
               </tbody>
             </table>
           </div>
+          )}
+          <p className="text-[11px] text-gray-400 dark:text-gray-500 italic border-t border-gray-100 dark:border-gray-700 pt-3">
+            Attribution is a probable match derived from road-segment to tender mapping. Figures are
+            to be verified against the tender and contract documents before any recovery action.
+          </p>
         </div>
       </div>
 

@@ -9,7 +9,8 @@ import {
   Settings, 
   X, 
   FileCheck2, 
-  Crosshair 
+  Crosshair,
+  Wrench
 } from 'lucide-react';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -24,7 +25,7 @@ const Sidebar = ({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => vo
     { name: 'Home', href: '/', icon: Home },
     { name: 'Drive Mode (Autonomous)', href: '/drive', icon: Crosshair },
     { name: 'Report Pothole', href: '/report', icon: AlertCircle },
-    { name: 'My Reports', href: '/reports', icon: List },
+    { name: 'My Reports', href: '/my-reports', icon: List },
     { name: 'Map View', href: '/map', icon: Map },
   ];
 
@@ -32,7 +33,7 @@ const Sidebar = ({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => vo
     { name: 'Overview', href: '/', icon: LayoutDashboard },
     { name: 'Drive Mode (Survey)', href: '/drive', icon: Crosshair },
     { name: 'Review Reports', href: '/review', icon: FileCheck2 },
-    { name: 'Work Orders', href: '/reports', icon: List },
+    { name: 'Work Orders', href: '/work-orders', icon: Wrench },
     { name: 'Map View', href: '/map', icon: Map },
     { name: 'Analytics', href: '/analytics', icon: BarChart2 },
     { name: 'Admin', href: '/admin', icon: Settings },
@@ -58,7 +59,7 @@ const Sidebar = ({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => vo
       {/* Sidebar component */}
       <motion.div
         className={clsx(
-          "fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 flex flex-col",
+          "fixed inset-y-0 left-0 z-50 w-64 shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 flex flex-col",
           open ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -93,7 +94,7 @@ const Sidebar = ({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => vo
                     isActive
                       ? 'bg-govBlue text-white'
                       : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white',
-                    'group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors'
+                    'group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap'
                   )}
                 >
                   <item.icon
@@ -103,7 +104,7 @@ const Sidebar = ({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => vo
                     )}
                     aria-hidden="true"
                   />
-                  {item.name}
+                  <span className="truncate">{item.name}</span>
                 </Link>
               );
             })}

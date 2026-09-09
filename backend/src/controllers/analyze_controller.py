@@ -20,7 +20,9 @@ async def analyze_image(
     fov_vertical_deg: Optional[float] = Form(45.0),
     fov_horizontal_deg: Optional[float] = Form(60.0),
     conf_threshold: Optional[float] = Form(0.35),
-    capture_source: Optional[str] = Form("WORKER")
+    capture_source: Optional[str] = Form("WORKER"),
+    # Live sampling sets this False so clean frames are analysed but not stored.
+    store_clean_frames: Optional[bool] = Form(True)
 ):
     # Set default values if not provided
     camera_height_m = camera_height_m or 1.2
@@ -38,7 +40,8 @@ async def analyze_image(
             fov_vertical_deg=fov_vertical_deg,
             fov_horizontal_deg=fov_horizontal_deg,
             conf_threshold=conf_threshold,
-            message=message
+            message=message,
+            store_clean_frames=(store_clean_frames is not False)
         )
     elif detection_method == "LLM - Gemini":
         response = await analyze_image_gemini(image=image, message=message)
@@ -60,19 +63,17 @@ async def analyze_image_yolo(
     fov_vertical_deg: float,
     fov_horizontal_deg: float,
     conf_threshold: float,
-    message: Optional[str]
+    message: Optional[str],
+    store_clean_frames: bool = True
 ):
     image_bytes = await image.read()
     analysis_id = str(uuid.uuid4())
-    
-    original_filename = f"analysis/{analysis_id}_original.jpg"
-    original_s3_url = s3_service.upload_file_obj_to_s3(BytesIO(image_bytes), original_filename)
-    if not original_s3_url:
-        # Fallback to local data URI or placeholder if S3 credentials are not configured
-        import base64
-        b64 = base64.b64encode(image_bytes).decode("utf-8")
-        original_s3_url = f"data:image/jpeg;base64,{b64}"
 
+    # Detect first, store second. Drive Mode samples a frame every couple of
+    # seconds and most of them are clean road; uploading those to the object
+    # store only adds round-trip latency to the overlay and fills the bucket
+    # with pictures of nothing. With store_clean_frames=False a frame is only
+    # persisted when it actually contains a defect worth a report.
     annotated_img, pothole_details = yolo_service.process_image_with_yolo(
         image_bytes,
         camera_height_m,
@@ -81,6 +82,29 @@ async def analyze_image_yolo(
         fov_horizontal_deg,
         conf_threshold
     )
+
+    if not pothole_details and not store_clean_frames:
+        return JSONResponse(content={
+            "original_image_url": None,
+            "annotated_image_url": None,
+            "camera_params": {
+                "camera_height_m": camera_height_m,
+                "tilt_angle_deg": tilt_angle_deg,
+                "fov_vertical_deg": fov_vertical_deg,
+                "fov_horizontal_deg": fov_horizontal_deg
+            },
+            "pothole_details": [],
+            "message": message,
+            "stored": False
+        })
+
+    original_filename = f"analysis/{analysis_id}_original.jpg"
+    original_s3_url = s3_service.upload_file_obj_to_s3(BytesIO(image_bytes), original_filename)
+    if not original_s3_url:
+        # Fallback to local data URI or placeholder if S3 credentials are not configured
+        import base64
+        b64 = base64.b64encode(image_bytes).decode("utf-8")
+        original_s3_url = f"data:image/jpeg;base64,{b64}"
 
     annotated_s3_url = original_s3_url
     if pothole_details:

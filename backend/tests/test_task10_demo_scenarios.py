@@ -64,7 +64,7 @@ class TestTask10DemoScenarios(unittest.TestCase):
         res_notice = self.client.get(f"/api/defects/{target['id']}/notice")
         self.assertEqual(res_notice.status_code, 200)
         notice = res_notice.json()
-        self.assertIn("MIDC/NOT/2026/", notice["notice_ref"])
+        self.assertIn("SIDC/NOT/2026/", notice["notice_ref"])
         self.assertEqual(notice["contractor_name"], "B.G. Shirke Construction Technology Pvt Ltd")
         self.assertIn("NOTICE UNDER ROAD WORK DEFECT LIABILITY PERIOD", notice["legal_hedge"])
 

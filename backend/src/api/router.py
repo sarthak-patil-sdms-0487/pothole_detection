@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from ..routes import reports, analyze, tenders, defects, slag, survey_runs, stats
+from ..routes import reports, analyze, tenders, defects, slag, survey_runs, stats, repair_jobs
 
 router = APIRouter()
 
@@ -10,4 +10,5 @@ router.include_router(defects.router, prefix="/api")
 router.include_router(slag.router, prefix="/api")
 router.include_router(survey_runs.router, prefix="/api")
 router.include_router(stats.router, prefix="/api")
+router.include_router(repair_jobs.router, prefix="/api")
 

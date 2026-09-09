@@ -1,0 +1,12 @@
+./run.sh --ngrok
+
+
+URL	http://localhost:9001
+Username	minioadmin
+Password	minioadmin
+
+
+Username	postgres
+Password	postgres
+Database	midc_pothole
+

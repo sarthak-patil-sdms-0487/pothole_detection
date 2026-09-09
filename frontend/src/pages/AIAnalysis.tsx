@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../config';
 
@@ -15,6 +15,15 @@ const AIAnalysis = () => {
     return <p>No analysis data available. Please submit a report first.</p>;
   }
 
+  interface PotholeDetail {
+    pothole_id_in_image: number;
+    confidence: number;
+    estimated_distance_m?: number | null;
+    estimated_width_cm?: number | null;
+    estimated_width_cm_range?: string | null;
+    size_category?: string | null;
+  }
+
   const {
     original_image_url,
     annotated_image_url,
@@ -23,7 +32,7 @@ const AIAnalysis = () => {
     user_pothole_count,
     camera_params,
     message,
-  } = analysisResult;
+  }: { pothole_details: PotholeDetail[]; [key: string]: any } = analysisResult;
 
   const isGeminiAnalysis = detection_method === 'LLM - Gemini';
 
@@ -52,7 +61,9 @@ const AIAnalysis = () => {
         if (isGeminiAnalysis) {
           estSize = pothole_details.map(p => p.estimated_width_cm_range).join(', ');
         } else {
-          const estimatedSizes = pothole_details.map(p => p.estimated_width_cm).filter(w => w !== null);
+          const estimatedSizes = pothole_details
+            .map((p) => p.estimated_width_cm)
+            .filter((w): w is number => typeof w === 'number');
           if (estimatedSizes.length > 0) {
             estSize = estimatedSizes.length > 1 
               ? `${Math.min(...estimatedSizes).toFixed(1)} - ${Math.max(...estimatedSizes).toFixed(1)} cm`
@@ -96,7 +107,7 @@ const AIAnalysis = () => {
           setIsSubmitting(false);
         }
       },
-      (error) => {
+      () => {
         setSubmitStatus({ type: 'error', message: 'Could not get location. Please enable location services.' });
         setIsSubmitting(false);
       }

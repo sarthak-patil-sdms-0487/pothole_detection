@@ -14,8 +14,9 @@ The backend follows a modular, Express-style MVC structure:
   - `routes/`: Defines the API routes and their corresponding controller functions.
   - `schemas/`: Pydantic and SQLAlchemy schemas for data validation and ORM.
   - `services/`: Houses external services, such as S3, YOLO, and Gemini.
-  - `utils/`: Utility functions.
 - `main.py`: The main entry point for the FastAPI application.
-- `scripts/`: Contains standalone scripts, such as database migration scripts.
-- `models/`: Contains the machine learning models.
-- `legacy_mock_data/`: Contains unused mock data files.
+- `src/scripts/`: Standalone scripts — schema migration, gazetteer loading, and seed data.
+- `src/models/`: Machine learning model weights.
+- `data/`: The segment gazetteer GeoJSON and the sample DLP extraction output.
+- `tests/`: Pytest suite. Runs against a disposable database, never your dev Postgres —
+  see `tests/conftest.py`.
