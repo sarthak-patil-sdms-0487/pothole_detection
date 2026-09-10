@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 import logging
 
+from ..services import s3_service
 from ..schemas.defect import Defect
 from ..schemas.report import Report
 from ..schemas.evidence import Evidence
@@ -103,15 +104,23 @@ def verify_repair(
         img_hash = hashlib.sha256(image_bytes).hexdigest() if image_bytes else None
         evidence_uri = photo_uri or f"/uploads/after_defect_{defect.id}_{int(datetime.datetime.utcnow().timestamp())}.jpg"
 
-        # Also save image file locally if raw bytes provided
+        # Persist the AFTER photo to object storage, same as detection images, so
+        # all evidence lives in one versioned, backed-up place. Falls back to the
+        # local uploads/ dir only when object storage is not configured, so the
+        # feature still works on a bare checkout.
         if image_bytes and photo_uri is None:
-            upload_dir = os.path.abspath("uploads")
-            os.makedirs(upload_dir, exist_ok=True)
-            filename = f"after_defect_{defect.id}_{int(datetime.datetime.utcnow().timestamp())}.jpg"
-            file_path = os.path.join(upload_dir, filename)
-            with open(file_path, "wb") as f:
-                f.write(image_bytes)
-            evidence_uri = f"/uploads/{filename}"
+            ts = int(datetime.datetime.utcnow().timestamp())
+            object_name = f"evidence/after_defect_{defect.id}_{ts}.jpg"
+            uploaded_url = s3_service.upload_file_obj_to_s3(io.BytesIO(image_bytes), object_name)
+            if uploaded_url:
+                evidence_uri = uploaded_url
+            else:
+                upload_dir = os.path.abspath("uploads")
+                os.makedirs(upload_dir, exist_ok=True)
+                filename = f"after_defect_{defect.id}_{ts}.jpg"
+                with open(os.path.join(upload_dir, filename), "wb") as f:
+                    f.write(image_bytes)
+                evidence_uri = f"/uploads/{filename}"
 
         after_evidence = Evidence(
             defect_id=defect.id,

@@ -146,7 +146,7 @@ cat <<EOF
   app          $FRONTEND_URL
   api          http://localhost:$BACKEND_PORT        ${DIM}docs at /docs${OFF}
   minio api    http://localhost:9000
-  minio console http://localhost:9001      ${DIM}minioadmin / minioadmin${OFF}
+  minio console http://localhost:9001      ${DIM}${MINIO_ROOT_USER:-minioadmin} / (see backend/.env)${OFF}
   postgres     localhost:5434
 EOF
 [[ $USE_NGROK -eq 1 && -n "${APP_URL:-}" ]] && echo "  public app   $APP_URL      <- open this on the phone"
