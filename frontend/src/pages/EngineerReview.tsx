@@ -196,8 +196,8 @@ const EngineerReview: React.FC = () => {
         <div class="sub">Pune Division &middot; Road Defect Monitoring Cell</div>
       </div>
       <pre>${esc(noticePayload.notice_text)}</pre>
-      ${noticePayload.before_photo_url && String(noticePayload.before_photo_url).startsWith('http')
-        ? `<div><img src="${esc(noticePayload.before_photo_url)}" /><div class="cap">Photographic evidence &mdash; ${esc(noticePayload.notice_ref)}</div></div>`
+      ${noticePayload.before_photo_url && noticePayload.before_photo_url !== 'N/A'
+        ? `<div><img src="${esc(String(noticePayload.before_photo_url).startsWith('/') ? window.location.origin + noticePayload.before_photo_url : noticePayload.before_photo_url)}" /><div class="cap">Photographic evidence &mdash; ${esc(noticePayload.notice_ref)}</div></div>`
         : ''}
       </body></html>`);
     w.document.close();
@@ -800,28 +800,42 @@ const EngineerReview: React.FC = () => {
 {noticePayload.notice_text}
                   </pre>
 
-                  {/* Photographic evidence, shown inline so the reviewer sees the
-                      defect the complaint is about without leaving the dialog. */}
-                  {noticePayload.before_photo_url &&
-                    String(noticePayload.before_photo_url).startsWith('http') && (
-                    <div className="mt-5 pt-4 border-t border-gray-200">
-                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-700 uppercase tracking-wide">
-                        <ImageIcon className="w-3.5 h-3.5" /> Photographic Evidence
+                  {/* Photographic evidence + location. The image path may be an
+                      absolute URL or a same-origin path (/pothole-images/...), so
+                      accept any real value; the map link renders independently so
+                      location shows even if the photo is missing. */}
+                  {(() => {
+                    const img = noticePayload.before_photo_url;
+                    const hasImg = img && img !== 'N/A';
+                    const hasMap = !!noticePayload.map_pin_url;
+                    if (!hasImg && !hasMap) return null;
+                    return (
+                      <div className="mt-5 pt-4 border-t border-gray-200">
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-gray-700 uppercase tracking-wide">
+                          <ImageIcon className="w-3.5 h-3.5" /> Photographic Evidence & Location
+                        </div>
+                        {hasImg && (
+                          <img
+                            src={img}
+                            alt={`Annotated defect for ${noticePayload.notice_ref}`}
+                            className="mt-2 rounded-lg border border-gray-300 max-h-72 w-auto"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        )}
+                        {(noticePayload.coordinates?.lat != null) && (
+                          <div className="mt-2 text-[11px] text-gray-600 font-mono">
+                            GPS {noticePayload.coordinates.lat}, {noticePayload.coordinates.lng}
+                          </div>
+                        )}
+                        {hasMap && (
+                          <a href={noticePayload.map_pin_url} target="_blank" rel="noreferrer"
+                             className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:underline">
+                            <MapPin className="w-3.5 h-3.5" /> Open location in Maps
+                          </a>
+                        )}
                       </div>
-                      <img
-                        src={noticePayload.before_photo_url}
-                        alt={`Annotated defect for ${noticePayload.notice_ref}`}
-                        className="mt-2 rounded-lg border border-gray-300 max-h-72 w-auto"
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                      />
-                      {noticePayload.map_pin_url && (
-                        <a href={noticePayload.map_pin_url} target="_blank" rel="noreferrer"
-                           className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:underline">
-                          <MapPin className="w-3.5 h-3.5" /> Open location in Maps
-                        </a>
-                      )}
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               </div>
 
