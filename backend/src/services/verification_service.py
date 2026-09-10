@@ -10,6 +10,7 @@ import numpy as np
 import logging
 
 from ..services import s3_service
+from ..services.audit_service import record_audit
 from ..schemas.defect import Defect
 from ..schemas.report import Report
 from ..schemas.evidence import Evidence
@@ -133,6 +134,20 @@ def verify_repair(
         )
         db.add(after_evidence)
 
+        # Audit the AFTER evidence write too, so both halves of the pair are on
+        # the immutable record — symmetric with the BEFORE freeze at notice-time.
+        record_audit(
+            db=db,
+            entity="defect",
+            entity_id=defect.id,
+            actor=assigned_to or "SURVEYOR",
+            action="freeze_after_evidence",
+            from_status=defect.state,
+            to_status=defect.state,
+            note=f"AFTER evidence recorded (hash={img_hash[:12] + '…' if img_hash else 'n/a'}, "
+                 f"distance={round(distance_m, 1)}m)",
+        )
+
         # Record or update RepairJob
         job = db.query(RepairJob).filter(RepairJob.defect_id == defect.id).first()
         if not job:
@@ -146,3 +161,88 @@ def verify_repair(
         db.commit()
 
     return is_verified, details
+
+
+def freeze_before_evidence(db: Session, defect, actor: str = "policy_engine"):
+    """
+    Freeze the BEFORE half of the evidence pair at the moment a defect is brought
+    to notice. Materialises an immutable Evidence(kind="BEFORE") row from the
+    sighting that triggered notice — snapshotting its image into object storage,
+    hashing it, and recording lat/lng/captured_at — so the "before" cannot later
+    be lost if the raw sighting image is deleted or its URL expires.
+
+    Idempotent: does nothing if a BEFORE row already exists for the defect.
+    """
+    from ..schemas.report import Report
+    from ..schemas.evidence import Evidence
+
+    existing = db.query(Evidence).filter(
+        Evidence.defect_id == defect.id, Evidence.kind == "BEFORE"
+    ).first()
+    if existing:
+        return existing
+
+    # Same sighting the statutory notice is built from: the most recent one with
+    # an image and coordinates.
+    before_report = db.query(Report).filter(
+        Report.defect_id == defect.id,
+        Report.lat.isnot(None),
+        Report.lng.isnot(None),
+    ).order_by(Report.id.desc()).first()
+    if before_report is None:
+        before_report = db.query(Report).filter(
+            Report.defect_id == defect.id
+        ).order_by(Report.id.desc()).first()
+    if before_report is None:
+        logger.info(f"[EVIDENCE] No sighting to freeze BEFORE for Defect #{defect.id}")
+        return None
+
+    src_url = (before_report.annotated_image_url
+               or before_report.original_image_url or "")
+    photo_uri = src_url
+    img_hash = None
+
+    # Best effort: copy the sighting image into an evidence/ object and hash it,
+    # so the frozen before-photo is independent of the original sighting object.
+    if src_url.startswith("http"):
+        try:
+            import requests
+            resp = requests.get(src_url, timeout=10)
+            if resp.ok and resp.content:
+                img_bytes = resp.content
+                img_hash = hashlib.sha256(img_bytes).hexdigest()
+                ts = int(datetime.datetime.utcnow().timestamp())
+                object_name = f"evidence/before_defect_{defect.id}_{ts}.jpg"
+                uploaded = s3_service.upload_file_obj_to_s3(io.BytesIO(img_bytes), object_name)
+                if uploaded:
+                    photo_uri = uploaded
+        except Exception as e:
+            logger.warning(f"[EVIDENCE] Could not snapshot BEFORE image for Defect #{defect.id}: {e}")
+
+    before_evidence = Evidence(
+        defect_id=defect.id,
+        kind="BEFORE",
+        photo_uri=photo_uri,
+        lat=before_report.lat,
+        lng=before_report.lng,
+        captured_at=(before_report.reportedDate or defect.first_seen_at
+                     or datetime.datetime.utcnow()),
+        hash=img_hash,
+    )
+    db.add(before_evidence)
+
+    # The frozen evidence is itself an audited event — this is what makes the
+    # "immutable, auditable" claim true rather than asserted.
+    record_audit(
+        db=db,
+        entity="defect",
+        entity_id=defect.id,
+        actor=actor,
+        action="freeze_before_evidence",
+        from_status=defect.state,
+        to_status=defect.state,
+        note=f"BEFORE evidence frozen from sighting #{before_report.id} "
+             f"(hash={img_hash[:12] + '…' if img_hash else 'n/a'})",
+    )
+    logger.info(f"[EVIDENCE] Froze BEFORE evidence for Defect #{defect.id} from sighting #{before_report.id}")
+    return before_evidence

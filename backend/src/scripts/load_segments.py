@@ -22,7 +22,7 @@ def load_segments():
                 name="MIDC Chakan Industrial Area (Phase II)",
                 config_json={
                     "confirm_repeat_threshold": 2,
-                    "notice_threshold": 2.5,
+                    "notice_threshold": 4.0,
                     "w_severity": 1.0,
                     "w_traffic": 0.8,
                     "w_gate_proximity": 0.5,

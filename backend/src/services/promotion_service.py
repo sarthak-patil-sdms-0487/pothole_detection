@@ -15,7 +15,13 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "confirm_repeat_threshold": 2,
-    "notice_threshold": 2.5,
+    # Auto-notice is a backstop for the genuinely extreme case (highest severity
+    # on the worst road, or a defect left ageing), NOT the default path. A typical
+    # confirmed defect scores ~3.5-3.9 and must PAUSE at CONFIRMED so an engineer
+    # makes the human, policy-governed decision to bring it to notice — the core
+    # of the staged-notice design. Only the worst case (High severity on a
+    # critical + weighbridge + active-DLP segment, score 4.0) crosses on its own.
+    "notice_threshold": 4.0,
     "w_severity": 1.0,
     "w_traffic": 0.8,
     "w_gate_proximity": 0.5,
@@ -111,6 +117,14 @@ def promote(
             # Statutory 48-Hour SLA Mandate
             defect.sla_due_at = now + datetime.timedelta(hours=48)
             defect.breach_flag = False
+            # Freeze the BEFORE half of the evidence pair at the exact moment the
+            # defect is brought to notice, so the pre-repair state is preserved
+            # immutably regardless of what later happens to the raw sighting.
+            try:
+                from ..services import verification_service
+                verification_service.freeze_before_evidence(db, defect, actor=actor)
+            except Exception as e:
+                logger.error(f"[PROMOTION] BEFORE-evidence freeze failed on Defect #{defect.id}: {e}")
 
         # Always evaluate contractor warranty & liability on entering NOTICED.
         #
