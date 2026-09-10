@@ -30,8 +30,8 @@ class Report(Base):
     estSize = Column(String, nullable=True)
 
     # Staged-notice lifecycle & attribution extensions
-    defect_id = Column(Integer, ForeignKey("defect.id"), nullable=True)
-    segment_id = Column(Integer, ForeignKey("road_segment.id"), nullable=True)
+    defect_id = Column(Integer, ForeignKey("defect.id"), nullable=True, index=True)
+    segment_id = Column(Integer, ForeignKey("road_segment.id"), nullable=True, index=True)
     capture_source = Column(String, nullable=True)  # WORKER | SURVEY | OPPORTUNISTIC
     survey_run_id = Column(Integer, ForeignKey("survey_run.id"), nullable=True)
 

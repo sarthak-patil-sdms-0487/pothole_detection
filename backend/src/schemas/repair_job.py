@@ -6,7 +6,7 @@ class RepairJob(Base):
     __tablename__ = "repair_job"
 
     id = Column(Integer, primary_key=True, index=True)
-    defect_id = Column(Integer, ForeignKey("defect.id"), nullable=True)
+    defect_id = Column(Integer, ForeignKey("defect.id"), nullable=True, index=True)
     assigned_to = Column(String, nullable=True)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)

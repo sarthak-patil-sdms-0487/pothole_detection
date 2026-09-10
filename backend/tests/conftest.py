@@ -32,3 +32,4 @@ if TEST_DATABASE_URL == _DEFAULT_TEST_URL and _SQLITE_PATH.exists():
     _SQLITE_PATH.unlink()
 
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+

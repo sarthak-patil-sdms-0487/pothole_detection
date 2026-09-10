@@ -7,7 +7,7 @@ class LiabilityVerdict(Base):
     __tablename__ = "liability_verdict"
 
     id = Column(Integer, primary_key=True, index=True)
-    defect_id = Column(Integer, ForeignKey("defect.id"), nullable=True)
+    defect_id = Column(Integer, ForeignKey("defect.id"), nullable=True, index=True)
     tender_id = Column(Integer, ForeignKey("tender.id"), nullable=True)
     verdict = Column(String, nullable=False)  # IN_WARRANTY | OUT_OF_WARRANTY | DISPUTED | NO_MATCHING_CONTRACT
     confidence = Column(Float, nullable=True)

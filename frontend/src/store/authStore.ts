@@ -1,52 +1,100 @@
 import { create } from 'zustand';
+import { API_BASE_URL } from '../config';
 
-export type Role = 'SURVEYOR' | 'ENGINEER';
+export type Role = 'SURVEYOR' | 'ENGINEER' | 'CITIZEN';
 
-const STORAGE_KEY = 'midc_user_role';
-
-interface AuthState {
+export interface AuthUser {
+  id: number;
+  name: string;
+  email: string;
   role: Role;
-  setRole: (role: Role) => void;
-  toggleRole: () => void;
+  organization?: string | null;
 }
 
-const readSavedRole = (): Role => {
-  if (typeof window === 'undefined') return 'ENGINEER';
-  const saved = localStorage.getItem(STORAGE_KEY);
-  return saved === 'ENGINEER' || saved === 'SURVEYOR' ? saved : 'ENGINEER';
+const TOKEN_KEY = 'midc_token';
+const USER_KEY = 'midc_user';
+
+const read = <T,>(key: string): T | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const v = localStorage.getItem(key);
+    return v ? (JSON.parse(v) as T) : null;
+  } catch {
+    return null;
+  }
 };
 
-const persist = (role: Role) => {
-  if (typeof window !== 'undefined') localStorage.setItem(STORAGE_KEY, role);
+const write = (key: string, val: unknown) => {
+  if (typeof window === 'undefined') return;
+  try {
+    if (val === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(val));
+  } catch {
+    /* private mode / storage disabled — stay in memory only */
+  }
 };
+
+interface AuthState {
+  token: string | null;
+  user: AuthUser | null;
+  role: Role;                     // convenience mirror of user?.role for existing screens
+  isAuthenticated: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => void;
+}
+
+const savedUser = read<AuthUser>(USER_KEY);
+const savedTokenRaw = typeof window !== 'undefined' ? (localStorage.getItem(TOKEN_KEY) || null) : null;
 
 export const useAuthStore = create<AuthState>((set) => ({
-  role: readSavedRole(),
-  setRole: (role) => {
-    persist(role);
-    set({ role });
+  token: savedTokenRaw,
+  user: savedUser,
+  role: savedUser?.role ?? 'CITIZEN',
+  isAuthenticated: !!savedTokenRaw,
+
+  login: async (email, password) => {
+    const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Login failed' }));
+      throw new Error(err.detail || 'Login failed');
+    }
+    const data = await res.json();
+    const token: string = data.access_token;
+    const user: AuthUser = data.user;
+    if (typeof window !== 'undefined') {
+      try { localStorage.setItem(TOKEN_KEY, token); } catch { /* ignore */ }
+    }
+    write(USER_KEY, user);
+    set({ token, user, role: user.role, isAuthenticated: true });
   },
-  toggleRole: () =>
-    set((state) => {
-      const nextRole: Role = state.role === 'SURVEYOR' ? 'ENGINEER' : 'SURVEYOR';
-      persist(nextRole);
-      return { role: nextRole };
-    }),
+
+  logout: () => {
+    if (typeof window !== 'undefined') {
+      try { localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
+    }
+    write(USER_KEY, null);
+    set({ token: null, user: null, role: 'CITIZEN', isAuthenticated: false });
+  },
 }));
 
 /**
- * fetch() with the caller's current role attached.
+ * fetch() with the signed JWT attached as a Bearer token.
  *
- * The backend authorises on the X-Role header, so every call that hits a
- * role-gated endpoint must carry it. This used to be hand-written at each call
- * site, which is how the admin screen ended up hardcoding 'ENGINEER' regardless
- * of who was actually signed in. Route requests through here instead.
- *
- * Readable outside React (the store is not a hook here), so it works in
- * loaders and event handlers as well as components.
+ * Authorisation is now proven by this token, not by a client-set role header —
+ * a forged 'X-Role: ENGINEER' no longer grants anything. On a 401 (expired or
+ * missing session) the local session is cleared so the app falls back to login.
  */
-export const authFetch = (url: string, options: RequestInit = {}): Promise<Response> => {
+export const authFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
   const headers = new Headers(options.headers || {});
-  headers.set('X-Role', useAuthStore.getState().role);
-  return fetch(url, { ...options, headers });
+  const token = useAuthStore.getState().token;
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const res = await fetch(url, { ...options, headers });
+  if (res.status === 401) {
+    useAuthStore.getState().logout();
+  }
+  return res;
 };

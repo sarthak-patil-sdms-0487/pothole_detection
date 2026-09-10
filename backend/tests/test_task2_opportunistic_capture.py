@@ -1,3 +1,4 @@
+from tests.auth_helpers import auth_headers
 import sys
 import os
 import unittest
@@ -53,7 +54,7 @@ class TestTask2OpportunisticCapture(unittest.TestCase):
             "capture_source": "OPPORTUNISTIC",
             "severity": "Medium"
         }
-        response = self.client.post("/api/reports", json=payload, headers={"X-Role": "SURVEYOR"})
+        response = self.client.post("/api/reports", json=payload, headers=auth_headers("SURVEYOR"))
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data.get("capture_source"), "OPPORTUNISTIC")

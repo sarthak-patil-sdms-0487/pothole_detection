@@ -22,6 +22,9 @@ class Settings:
         self.s3_secret_access_key: str = os.getenv("S3_SECRET_ACCESS_KEY") or os.getenv("AWS_SECRET_ACCESS_KEY")
         self.s3_bucket_name: str = os.getenv("S3_BUCKET_NAME") or os.getenv("AWS_S3_BUCKET_NAME")
         self.gemini_api_key: str = os.getenv("GEMINI_API_KEY")
+        # JWT signing secret for authentication. MUST be overridden in production;
+        # a rotated secret invalidates all outstanding tokens (forces re-login).
+        self.jwt_secret: str = os.getenv("JWT_SECRET", "dev-insecure-change-me-in-production")
         self.notify_contractors_live: bool = os.getenv("NOTIFY_CONTRACTORS_LIVE", "false").lower() in ("true", "1", "yes")
 
         # Outbound mail for contractor complaint notices. Without SMTP_HOST the

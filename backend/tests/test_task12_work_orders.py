@@ -1,3 +1,4 @@
+from tests.auth_helpers import auth_headers
 import sys
 import os
 import unittest
@@ -34,7 +35,7 @@ class TestTask12WorkOrders(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         defect_id = res.json()["defect_id"]
         promoted = self.client.post(
-            f"/api/defects/{defect_id}/notice", headers={"X-Role": "ENGINEER"}
+            f"/api/defects/{defect_id}/notice", headers=auth_headers("ENGINEER")
         )
         self.assertEqual(promoted.status_code, 200)
         return defect_id
@@ -87,7 +88,7 @@ class TestTask12WorkOrders(unittest.TestCase):
         blocked = self.client.post(
             "/api/work-orders/assign",
             json={"defect_id": sighting_defect_id, "assigned_to": "Crew A"},
-            headers={"X-Role": "ENGINEER"},
+            headers=auth_headers("ENGINEER"),
         )
         self.assertEqual(blocked.status_code, 400)
 
@@ -97,7 +98,7 @@ class TestTask12WorkOrders(unittest.TestCase):
         forbidden = self.client.post(
             "/api/work-orders/assign",
             json={"defect_id": defect_id, "assigned_to": "Crew A"},
-            headers={"X-Role": "SURVEYOR"},
+            headers=auth_headers("SURVEYOR"),
         )
         self.assertEqual(forbidden.status_code, 403)
 
@@ -110,7 +111,7 @@ class TestTask12WorkOrders(unittest.TestCase):
                 "material_kg": 85.0,
                 "start_now": True,
             },
-            headers={"X-Role": "ENGINEER"},
+            headers=auth_headers("ENGINEER"),
         )
         self.assertEqual(assigned.status_code, 200)
         job = assigned.json()["job"]
@@ -122,7 +123,7 @@ class TestTask12WorkOrders(unittest.TestCase):
         updated = self.client.post(
             "/api/work-orders/assign",
             json={"defect_id": defect_id, "assigned_to": "Ward 5 Crew", "cost_inr": 4200.0},
-            headers={"X-Role": "ENGINEER"},
+            headers=auth_headers("ENGINEER"),
         )
         self.assertEqual(updated.status_code, 200)
         updated_job = updated.json()["job"]

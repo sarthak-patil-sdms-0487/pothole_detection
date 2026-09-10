@@ -1,3 +1,4 @@
+from tests.auth_helpers import auth_headers
 import sys
 import os
 import unittest
@@ -44,7 +45,7 @@ class TestTask7BeforeAfterVerification(unittest.TestCase):
         defect_id = res_rep.json()["defect_id"]
 
         # Ensure defect is NOTICED
-        res_notice = self.client.post(f"/api/defects/{defect_id}/notice", headers={"X-Role": "ENGINEER"})
+        res_notice = self.client.post(f"/api/defects/{defect_id}/notice", headers=auth_headers("ENGINEER"))
         self.assertEqual(res_notice.status_code, 200)
         defect_data = res_notice.json()
         self.assertEqual(defect_data["state"], "NOTICED")
@@ -63,7 +64,7 @@ class TestTask7BeforeAfterVerification(unittest.TestCase):
             f"/api/defects/{defect_id}/repair-evidence",
             files=files,
             data=data,
-            headers={"X-Role": "SURVEYOR"}
+            headers=auth_headers("SURVEYOR")
         )
         self.assertEqual(res_evidence.status_code, 200)
         ev_data = res_evidence.json()
@@ -84,7 +85,7 @@ class TestTask7BeforeAfterVerification(unittest.TestCase):
         res_close = self.client.post(
             f"/api/defects/{defect_id}/close",
             json={"reason": "Certified restoration completed"},
-            headers={"X-Role": "ENGINEER"}
+            headers=auth_headers("ENGINEER")
         )
         self.assertEqual(res_close.status_code, 200)
         close_data = res_close.json()
@@ -116,7 +117,7 @@ class TestTask7BeforeAfterVerification(unittest.TestCase):
             f"/api/defects/{defect_id}/repair-evidence",
             files=files,
             data=data,
-            headers={"X-Role": "SURVEYOR"}
+            headers=auth_headers("SURVEYOR")
         )
         self.assertEqual(res_fail.status_code, 422, "Must return HTTP 422 when verification checks fail")
         fail_body = res_fail.json()
@@ -147,7 +148,7 @@ class TestTask7BeforeAfterVerification(unittest.TestCase):
         res_close = self.client.post(
             f"/api/defects/{defect_id}/close",
             json={"reason": "Late municipal repair", "override_verification": True},
-            headers={"X-Role": "ENGINEER"}
+            headers=auth_headers("ENGINEER")
         )
         self.assertEqual(res_close.status_code, 200)
         data = res_close.json()

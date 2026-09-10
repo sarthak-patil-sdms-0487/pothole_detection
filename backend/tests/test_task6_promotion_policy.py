@@ -1,3 +1,4 @@
+from tests.auth_helpers import auth_headers
 import sys
 import os
 import unittest
@@ -102,11 +103,11 @@ class TestTask6PromotionPolicy(unittest.TestCase):
         db.close()
 
         # 1. Non-engineer role fails with 403 Forbidden
-        res_forbidden = self.client.post(f"/api/defects/{defect_id}/notice", headers={"X-Role": "SURVEYOR"})
+        res_forbidden = self.client.post(f"/api/defects/{defect_id}/notice", headers=auth_headers("SURVEYOR"))
         self.assertEqual(res_forbidden.status_code, 403)
 
         # 2. Engineer role succeeds and promotes to NOTICED
-        res_success = self.client.post(f"/api/defects/{defect_id}/notice", headers={"X-Role": "ENGINEER"})
+        res_success = self.client.post(f"/api/defects/{defect_id}/notice", headers=auth_headers("ENGINEER"))
         self.assertEqual(res_success.status_code, 200)
         data = res_success.json()
         self.assertEqual(data["state"], "NOTICED")

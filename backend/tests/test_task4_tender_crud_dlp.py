@@ -1,3 +1,4 @@
+from tests.auth_helpers import auth_headers
 import sys
 import os
 import unittest
@@ -22,13 +23,13 @@ class TestTask4TenderCrudDlp(unittest.TestCase):
 
     def test_list_tenders_and_active_filter(self):
         # 1. Get all tenders
-        res_all = self.client.get("/api/tenders", headers={"X-Role": "ENGINEER"})
+        res_all = self.client.get("/api/tenders", headers=auth_headers("ENGINEER"))
         self.assertEqual(res_all.status_code, 200)
         tenders = res_all.json()
         self.assertGreaterEqual(len(tenders), 10)
 
         # 2. Get active DLP only
-        res_active = self.client.get("/api/tenders?active_only=true", headers={"X-Role": "ENGINEER"})
+        res_active = self.client.get("/api/tenders?active_only=true", headers=auth_headers("ENGINEER"))
         self.assertEqual(res_active.status_code, 200)
         active_tenders = res_active.json()
         self.assertTrue(all(t["is_active_dlp"] is True for t in active_tenders))
@@ -45,7 +46,7 @@ class TestTask4TenderCrudDlp(unittest.TestCase):
             "value_inr": 15000000.0,
             "segment_ids": [1, 2]
         }
-        res_create = self.client.post("/api/tenders", json=payload, headers={"X-Role": "ENGINEER"})
+        res_create = self.client.post("/api/tenders", json=payload, headers=auth_headers("ENGINEER"))
         self.assertEqual(res_create.status_code, 200)
         created = res_create.json()
         tender_id = created["id"]
@@ -54,7 +55,7 @@ class TestTask4TenderCrudDlp(unittest.TestCase):
         self.assertTrue(created["is_active_dlp"])
 
         # Delete the test tender
-        res_del = self.client.delete(f"/api/tenders/{tender_id}", headers={"X-Role": "ENGINEER"})
+        res_del = self.client.delete(f"/api/tenders/{tender_id}", headers=auth_headers("ENGINEER"))
         self.assertEqual(res_del.status_code, 204)
 
     def test_extracted_dlp_samples_exist(self):

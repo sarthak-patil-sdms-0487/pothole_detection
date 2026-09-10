@@ -1,3 +1,4 @@
+from tests.auth_helpers import auth_headers
 import sys
 import os
 import unittest
@@ -15,7 +16,7 @@ class TestTask10DemoScenarios(unittest.TestCase):
         cls.client = TestClient(app)
 
     def test_all_six_lifecycle_scenarios_queryable(self):
-        res = self.client.get("/api/defects", headers={"X-Role": "ENGINEER"})
+        res = self.client.get("/api/defects", headers=auth_headers("ENGINEER"))
         self.assertEqual(res.status_code, 200)
         defects = res.json()
         self.assertEqual(len(defects), 6, "Must have exactly 6 seeded demo defects")
@@ -57,7 +58,7 @@ class TestTask10DemoScenarios(unittest.TestCase):
 
     def test_statutory_notice_endpoint_for_in_warranty_demo_defect(self):
         # Find the in-warranty active defect
-        res = self.client.get("/api/defects", headers={"X-Role": "ENGINEER"})
+        res = self.client.get("/api/defects", headers=auth_headers("ENGINEER"))
         defects = res.json()
         target = next(d for d in defects if d["state"] == "NOTICED" and not d["breach_flag"] and d.get("latest_verdict", {}).get("verdict") == "IN_WARRANTY")
         

@@ -171,12 +171,24 @@ class TestTask1SchemaAuditRole(unittest.TestCase):
         self.assertIn("policy threshold", audit.note)
 
     def test_role_resolution(self):
-        self.assertEqual(get_current_role(x_role="ENGINEER"), "ENGINEER")
-        self.assertEqual(get_current_role(x_role="engineer"), "ENGINEER")
-        self.assertEqual(get_current_role(x_role="SURVEYOR"), "SURVEYOR")
-        self.assertEqual(get_current_role(x_role=None, role="engineer"), "ENGINEER")
-        self.assertEqual(get_current_role(x_role=None, role=None), "SURVEYOR")
-        self.assertEqual(get_current_role(x_role="random"), "SURVEYOR")
+        # Role now comes from a signed JWT, never a client-supplied header.
+        from src.services import auth_service
+
+        # No credentials -> lowest-privilege default, not a forged role.
+        self.assertEqual(get_current_role(authorization=None), "SURVEYOR")
+
+        # A valid engineer token resolves to ENGINEER.
+        eng = auth_service.create_access_token(1, "ENGINEER", "e@test")
+        self.assertEqual(get_current_role(authorization=f"Bearer {eng}"), "ENGINEER")
+
+        # A surveyor token resolves to SURVEYOR.
+        sur = auth_service.create_access_token(2, "SURVEYOR", "s@test")
+        self.assertEqual(get_current_role(authorization=f"Bearer {sur}"), "SURVEYOR")
+
+        # A forged/garbage token is rejected outright (cannot be silently trusted).
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException):
+            get_current_role(authorization="Bearer not-a-real-token")
 
 if __name__ == "__main__":
     unittest.main()

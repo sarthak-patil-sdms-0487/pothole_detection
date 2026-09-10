@@ -1,3 +1,4 @@
+from tests.auth_helpers import auth_headers
 import sys
 import os
 import unittest
@@ -35,7 +36,7 @@ class TestTask8ContractorNotices(unittest.TestCase):
         defect_id = res_rep.json()["defect_id"]
 
         # Promote to NOTICED
-        res_notice = self.client.post(f"/api/defects/{defect_id}/notice", headers={"X-Role": "ENGINEER"})
+        res_notice = self.client.post(f"/api/defects/{defect_id}/notice", headers=auth_headers("ENGINEER"))
         self.assertEqual(res_notice.status_code, 200)
 
         # 2. Fetch formatted statutory notice
@@ -82,7 +83,7 @@ class TestTask8ContractorNotices(unittest.TestCase):
         defect_id = res_rep.json()["defect_id"]
 
         # Promote to NOTICED
-        self.client.post(f"/api/defects/{defect_id}/notice", headers={"X-Role": "ENGINEER"})
+        self.client.post(f"/api/defects/{defect_id}/notice", headers=auth_headers("ENGINEER"))
 
         # Check audit log for auto-dispatch
         db = SessionLocal()
@@ -95,11 +96,11 @@ class TestTask8ContractorNotices(unittest.TestCase):
         db.close()
 
         # 2. Manual resend test - non-engineer gets 403
-        res_forbid = self.client.post(f"/api/defects/{defect_id}/notice/send", headers={"X-Role": "SURVEYOR"})
+        res_forbid = self.client.post(f"/api/defects/{defect_id}/notice/send", headers=auth_headers("SURVEYOR"))
         self.assertEqual(res_forbid.status_code, 403)
 
         # 3. Engineer triggers resend
-        res_send = self.client.post(f"/api/defects/{defect_id}/notice/send", headers={"X-Role": "ENGINEER"})
+        res_send = self.client.post(f"/api/defects/{defect_id}/notice/send", headers=auth_headers("ENGINEER"))
         self.assertEqual(res_send.status_code, 200)
         send_report = res_send.json()
         self.assertIn(send_report["status"], ["SIMULATED", "SENT"])

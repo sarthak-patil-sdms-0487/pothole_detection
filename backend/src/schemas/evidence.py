@@ -7,7 +7,7 @@ class Evidence(Base):
     __tablename__ = "evidence"
 
     id = Column(Integer, primary_key=True, index=True)
-    defect_id = Column(Integer, ForeignKey("defect.id"), nullable=False)
+    defect_id = Column(Integer, ForeignKey("defect.id"), nullable=False, index=True)
     kind = Column(String, nullable=False)  # BEFORE | AFTER
     photo_uri = Column(String, nullable=False)
     lat = Column(Float, nullable=True)

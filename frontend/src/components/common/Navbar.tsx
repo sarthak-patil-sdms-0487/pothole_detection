@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Menu, Sun, Moon, ArrowRightLeft, ShieldCheck, UserCheck } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Menu, Sun, Moon, ShieldCheck, UserCheck, LogOut } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 
 const Navbar = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
   const [darkMode, setDarkMode] = useState(false);
-  const { role, toggleRole } = useAuthStore();
+  const { role, user, logout } = useAuthStore();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (darkMode) {
@@ -37,20 +38,26 @@ const Navbar = ({ toggleSidebar }: { toggleSidebar: () => void }) => {
 
       <div className="flex items-center space-x-1 sm:space-x-3 shrink-0">
         
-        {/* Global Role Switcher */}
-        <button
-          onClick={toggleRole}
-          className={`flex items-center gap-1 px-2.5 py-1 text-[11px] sm:text-sm font-bold rounded-full border transition-all shadow-sm ${
+        {/* Signed-in identity (role comes from the verified token, not togglable) */}
+        <div
+          className={`flex items-center gap-1 px-2.5 py-1 text-[11px] sm:text-sm font-bold rounded-full border shadow-sm ${
             role === 'ENGINEER'
               ? 'bg-purple-50 text-purple-800 border-purple-300 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800'
               : 'bg-blue-50 text-blue-800 border-blue-300 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800'
           }`}
-          title="Click to toggle between Surveyor and Engineer roles"
+          title={user?.email || ''}
         >
           {role === 'ENGINEER' ? <ShieldCheck className="w-4 h-4 text-purple-600" /> : <UserCheck className="w-4 h-4 text-blue-600" />}
-          <span className="hidden md:inline font-normal text-gray-500 dark:text-gray-400">Role:</span>
+          <span className="hidden md:inline font-normal text-gray-500 dark:text-gray-400">{user?.name?.split(' ')[0] || 'User'} ·</span>
           <span>{role}</span>
-          <ArrowRightLeft className="w-3 h-3 ml-0.5 text-gray-400" />
+        </div>
+
+        <button
+          onClick={() => { logout(); navigate('/login'); }}
+          className="p-2 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 focus:outline-none rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          title="Sign out"
+        >
+          <LogOut className="h-5 w-5" />
         </button>
 
         <button 

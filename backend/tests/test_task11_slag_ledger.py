@@ -1,3 +1,4 @@
+from tests.auth_helpers import auth_headers
 import sys
 import os
 import unittest
@@ -47,7 +48,7 @@ class TestTask11SlagLedger(unittest.TestCase):
             "tonnes": 10.0,
             "stockpile_location": "Yard B"
         }
-        res_create_lot = self.client.post("/api/slag/lots", json=lot_payload, headers={"X-Role": "ENGINEER"})
+        res_create_lot = self.client.post("/api/slag/lots", json=lot_payload, headers=auth_headers("ENGINEER"))
         self.assertEqual(res_create_lot.status_code, 200)
         created_lot = res_create_lot.json()
         lot_id = created_lot["id"]
@@ -60,7 +61,7 @@ class TestTask11SlagLedger(unittest.TestCase):
             "repair_job_id": 1,
             "kg_drawn": 500.0
         }
-        res_draw = self.client.post("/api/slag/draws", json=draw_payload, headers={"X-Role": "ENGINEER"})
+        res_draw = self.client.post("/api/slag/draws", json=draw_payload, headers=auth_headers("ENGINEER"))
         self.assertEqual(res_draw.status_code, 200)
         draw_data = res_draw.json()
         self.assertEqual(draw_data["kg_drawn"], 500.0)
@@ -72,7 +73,7 @@ class TestTask11SlagLedger(unittest.TestCase):
             "repair_job_id": 1,
             "kg_drawn": 20000.0
         }
-        res_over = self.client.post("/api/slag/draws", json=over_draw_payload, headers={"X-Role": "ENGINEER"})
+        res_over = self.client.post("/api/slag/draws", json=over_draw_payload, headers=auth_headers("ENGINEER"))
         self.assertEqual(res_over.status_code, 400)
 
 if __name__ == "__main__":

@@ -10,3 +10,7 @@ Username	postgres
 Password	postgres
 Database	midc_pothole
 
+engineer@pwd.pune.gov.in	engineer123	ENGINEER
+admin@pwd.pune.gov.in	admin123	ENGINEER
+surveyor@pune.gov.in	surveyor123	SURVEYOR
+citizen@pune.gov.in	citizen123	CITIZEN

@@ -1,3 +1,4 @@
+from tests.auth_helpers import auth_headers
 import sys
 import os
 import unittest
@@ -30,7 +31,7 @@ class TestTask5LiabilityDedupe(unittest.TestCase):
             "capture_source": "WORKER",
             "severity": "Low"
         }
-        res = self.client.post("/api/reports", json=payload, headers={"X-Role": "SURVEYOR"})
+        res = self.client.post("/api/reports", json=payload, headers=auth_headers("SURVEYOR"))
         self.assertEqual(res.status_code, 200)
         report_data = res.json()
         defect_id = report_data["defect_id"]
@@ -52,7 +53,7 @@ class TestTask5LiabilityDedupe(unittest.TestCase):
             "capture_source": "OPPORTUNISTIC",
             "severity": "Low"
         }
-        res = self.client.post("/api/reports", json=payload, headers={"X-Role": "SURVEYOR"})
+        res = self.client.post("/api/reports", json=payload, headers=auth_headers("SURVEYOR"))
         self.assertEqual(res.status_code, 200)
         report_data = res.json()
         defect_id = report_data["defect_id"]

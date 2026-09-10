@@ -7,8 +7,8 @@ class Defect(Base):
     __tablename__ = "defect"
 
     id = Column(Integer, primary_key=True, index=True)
-    segment_id = Column(Integer, ForeignKey("road_segment.id"), nullable=True)
-    state = Column(String, nullable=False, default="SIGHTING")  # SIGHTING | CONFIRMED | NOTICED | CLOSED
+    segment_id = Column(Integer, ForeignKey("road_segment.id"), nullable=True, index=True)
+    state = Column(String, nullable=False, default="SIGHTING", index=True)  # SIGHTING | CONFIRMED | NOTICED | CLOSED
     first_seen_at = Column(DateTime, default=datetime.datetime.utcnow)
     confirmed_at = Column(DateTime, nullable=True)
     noticed_at = Column(DateTime, nullable=True)
