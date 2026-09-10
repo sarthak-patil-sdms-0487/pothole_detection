@@ -106,7 +106,7 @@ const getDefectIcon = (d: Defect) => {
   const filteredDefects = defects.filter(d => filter === 'ALL' || d.state === filter);
 
   return (
-    <div className="relative h-full w-full rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm">
+    <div className="relative h-[calc(100dvh-9rem)] min-h-[480px] w-full rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm">
       {/* Top Filter Floating Card */}
       <div className="absolute top-4 left-4 z-[1000] bg-white/90 dark:bg-gray-800/90 backdrop-blur-md p-3 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3">
         <div className="flex items-center gap-2">
