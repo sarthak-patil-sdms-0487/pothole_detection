@@ -158,6 +158,14 @@ def verify_repair(
         job.completed_at = after_time
         job.material_type = material_type
         job.material_kg = material_kg
+        # Reflect slag consumption in the circular-economy ledger on close, same
+        # as the Work Orders assign path.
+        try:
+            from ..controllers.repair_job_controller import _sync_slag_draw
+            db.flush()
+            _sync_slag_draw(db, job)
+        except Exception as e:
+            logger.warning(f"[SLAG] draw sync on close failed for defect #{defect.id}: {e}")
         db.commit()
 
     return is_verified, details

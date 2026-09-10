@@ -10,6 +10,8 @@ from ..schemas.evidence import Evidence
 from ..schemas.repair_job import RepairJob
 from ..schemas.tender import Tender
 from ..schemas.liability_verdict import LiabilityVerdict
+from ..schemas.slag import SlagLot, SlagDraw
+from ..schemas import slag_dto
 from ..schemas import repair_job_dto
 from ..services.audit_service import record_audit
 
@@ -135,6 +137,52 @@ async def get_work_orders(
     return rows
 
 
+def _sync_slag_draw(db: Session, job: RepairJob) -> None:
+    """
+    Reflect a repair job's slag consumption in the circular-economy ledger.
+
+    When a job is assigned a steel-slag material, draw that tonnage from a
+    stockpile lot so the Analytics ledger (diverted kg, reclaimed value, CO2
+    avoided) actually moves. Idempotent: one draw per job, updated in place on
+    re-assign. Non-slag materials (cold-mix tar, etc.) draw nothing.
+    """
+    rate = slag_dto.STANDARD_SLAG_RATE_INR_PER_KG
+    is_slag = "slag" in (job.material_type or "").lower()
+    kg = float(job.material_kg or 0.0)
+
+    existing = db.query(SlagDraw).filter(SlagDraw.repair_job_id == job.id).first()
+
+    if not is_slag or kg <= 0:
+        # Material changed to non-slag or zeroed — remove any prior draw.
+        if existing:
+            db.delete(existing)
+        return
+
+    if existing:
+        existing.kg_drawn = kg
+        existing.notional_value_inr = round(kg * rate, 2)
+        return
+
+    # Draw from the stockpile lot with the most remaining capacity.
+    lots = db.query(SlagLot).all()
+    best_lot, best_remaining = None, -1.0
+    for lot in lots:
+        total_kg = (lot.tonnes or 0.0) * 1000.0
+        used = sum(d.kg_drawn for d in db.query(SlagDraw).filter(SlagDraw.slag_lot_id == lot.id).all())
+        remaining = total_kg - used
+        if remaining > best_remaining:
+            best_lot, best_remaining = lot, remaining
+    if best_lot is None:
+        return
+
+    db.add(SlagDraw(
+        slag_lot_id=best_lot.id,
+        repair_job_id=job.id,
+        kg_drawn=kg,
+        notional_value_inr=round(kg * rate, 2),
+    ))
+
+
 async def upsert_repair_job(
     payload: repair_job_dto.RepairJobUpsert,
     actor: str,
@@ -179,6 +227,9 @@ async def upsert_repair_job(
         job.cost_inr = payload.cost_inr
     if payload.start_now and not job.started_at:
         job.started_at = datetime.datetime.utcnow()
+
+    db.flush()  # ensure job.id exists for the slag-draw link
+    _sync_slag_draw(db, job)
 
     db.commit()
     db.refresh(job)

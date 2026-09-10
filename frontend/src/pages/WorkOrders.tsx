@@ -149,12 +149,29 @@ const WorkOrders = () => {
     fetchOrders();
   }, [role]);
 
+  // Suggested slag quantity scales with severity: a base charge plus more
+  // material for a worse pothole (Low ~58kg, High ~94kg). An estimate the
+  // engineer can override, so a work order is one click from complete.
+  const suggestKg = (severity: number | null): number =>
+    Math.round(40 + (severity ?? 0.5) * 60);
+
+  // Default crew derived from the road, so the required field is pre-filled
+  // rather than blank. Editable.
+  const suggestCrew = (segmentName: string | null): string => {
+    const road = (segmentName || '').split('(')[0].trim();
+    return road ? `${road} Cold-Mix Crew` : 'SIDC Estate Cold-Mix Crew';
+  };
+
   const openAssign = (order: WorkOrder) => {
     setAssigning(order);
+    // Keep existing values when updating an already-assigned job; otherwise
+    // pre-fill sensible defaults so Assign is one confirmation, not a form.
     setAssignForm({
-      assigned_to: order.job?.assigned_to || '',
+      assigned_to: order.job?.assigned_to || suggestCrew(order.segment_name),
       material_type: order.job?.material_type || MATERIAL_OPTIONS[0],
-      material_kg: order.job?.material_kg != null ? String(order.job.material_kg) : '',
+      material_kg: order.job?.material_kg != null
+        ? String(order.job.material_kg)
+        : String(suggestKg(order.severity)),
       cost_inr: order.job?.cost_inr != null ? String(order.job.cost_inr) : '',
     });
   };
