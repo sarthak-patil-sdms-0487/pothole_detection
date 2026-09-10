@@ -16,11 +16,14 @@ import {
   Layers,
   Sparkles,
   Sliders,
+  Zap,
+  Server,
   Filter,
   Brain,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL } from '../config';
+import { detect as detectLocal, loadDetector, type Detection } from '../lib/potholeDetector';
 import { authFetch } from '../store/authStore';
 
 interface ActiveTrack {
@@ -82,6 +85,22 @@ const DriveMode: React.FC = () => {
   const [timeIntervalSeconds, setTimeIntervalSeconds] = useState<number>(2);
   const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.40); // 40% — below this the detector starts boxing clean road; above ~0.5 it drops real potholes
   const [detectionMode, setDetectionMode] = useState<'yolo' | 'gemini'>('yolo');
+  // 'local' runs YOLO in the browser (no round-trip, instant overlay); 'server'
+  // is the original path. Gemini always uses the server.
+  const [engineMode, setEngineMode] = useState<'local' | 'server'>('local');
+  const [modelStatus, setModelStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+
+  // Warm the on-device model as soon as local YOLO is chosen, so the first
+  // frame is not stalled by a cold load.
+  useEffect(() => {
+    if (engineMode === 'local' && detectionMode === 'yolo' && modelStatus === 'idle') {
+      setModelStatus('loading');
+      loadDetector()
+        .then(() => setModelStatus('ready'))
+        .catch((e) => { console.error('Model load failed:', e); setModelStatus('error'); });
+    }
+  }, [engineMode, detectionMode, modelStatus]);
+
   
   // Telemetry metrics
   const [capturedFramesCount, setCapturedFramesCount] = useState<number>(0);
@@ -345,24 +364,68 @@ const DriveMode: React.FC = () => {
       setLogs((prev) => [initialLog, ...prev.slice(0, 19)]);
 
       try {
-        const formData = new FormData();
-        formData.append('image', blob, `drive_${logId}.jpg`);
-        formData.append('detection_method', detectionMode === 'gemini' ? 'LLM - Gemini' : 'YOLO (best.pt)');
-        formData.append('conf_threshold', confidenceThreshold.toString());
-        formData.append('capture_source', 'OPPORTUNISTIC');
-        // Clean frames are analysed but not stored: keeps the overlay responsive
-        // and stops the bucket filling with pictures of empty road.
-        formData.append('store_clean_frames', 'false');
+        // Detection source. Local (browser ONNX) gives an instant overlay with no
+        // round-trip; a frame is only sent to the server once it actually contains
+        // a pothole, for storage and reporting. Gemini and server-YOLO keep the
+        // original always-upload path.
+        const useLocal = engineMode === 'local' && detectionMode === 'yolo';
+        let result: any;
+        let potholes: any[];
 
-        const response = await fetch(`${API_BASE_URL}/api/analyze`, {
-          method: 'POST',
-          body: formData,
-        });
+        if (useLocal) {
+          // Run against the video's natural resolution so boxes map straight
+          // onto the overlay (which scales by video.videoWidth/Height).
+          let dets: Detection[] = [];
+          try {
+            dets = await detectLocal(video, video.videoWidth, video.videoHeight, confidenceThreshold);
+          } catch (e) {
+            console.error('Local inference failed, falling back to server:', e);
+            setModelStatus('error');
+            setEngineMode('server');
+          }
+          potholes = dets.map((d, i) => ({
+            pothole_id_in_image: i + 1,
+            confidence: d.confidence,
+            box_pixels: {
+              x1: Math.round(d.x1), y1: Math.round(d.y1),
+              x2: Math.round(d.x2), y2: Math.round(d.y2),
+            },
+          }));
 
-        if (!response.ok) throw new Error(`Analyze error: ${response.status}`);
+          if (potholes.length > 0) {
+            // Positive frame: upload once for storage + authoritative report data.
+            const formData = new FormData();
+            formData.append('image', blob, `drive_${logId}.jpg`);
+            formData.append('detection_method', 'YOLO (best.pt)');
+            formData.append('conf_threshold', confidenceThreshold.toString());
+            formData.append('capture_source', 'OPPORTUNISTIC');
+            formData.append('store_clean_frames', 'true');
+            try {
+              const resp = await fetch(`${API_BASE_URL}/api/analyze`, { method: 'POST', body: formData });
+              result = resp.ok ? await resp.json() : {};
+            } catch {
+              result = {};
+            }
+          } else {
+            result = {};
+          }
+        } else {
+          const formData = new FormData();
+          formData.append('image', blob, `drive_${logId}.jpg`);
+          formData.append('detection_method', detectionMode === 'gemini' ? 'LLM - Gemini' : 'YOLO (best.pt)');
+          formData.append('conf_threshold', confidenceThreshold.toString());
+          formData.append('capture_source', 'OPPORTUNISTIC');
+          formData.append('store_clean_frames', 'false');
 
-        const result = await response.json();
-        const potholes = result.pothole_details || [];
+          const response = await fetch(`${API_BASE_URL}/api/analyze`, {
+            method: 'POST',
+            body: formData,
+          });
+          if (!response.ok) throw new Error(`Analyze error: ${response.status}`);
+          result = await response.json();
+          potholes = result.pothole_details || [];
+        }
+
         const potholeCount = potholes.length;
         const now = Date.now();
 
@@ -920,6 +983,52 @@ const DriveMode: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {/* Inference location — only meaningful for YOLO (Gemini is server-only) */}
+            {detectionMode === 'yolo' && (
+              <div>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mb-2 flex items-center justify-between">
+                  <span>Inference</span>
+                  <span className={`text-[10px] font-bold ${
+                    modelStatus === 'ready' ? 'text-emerald-600'
+                    : modelStatus === 'loading' ? 'text-amber-600'
+                    : modelStatus === 'error' ? 'text-red-600' : 'text-gray-400'
+                  }`}>
+                    {engineMode === 'local'
+                      ? (modelStatus === 'ready' ? '● model ready'
+                         : modelStatus === 'loading' ? '● loading model…'
+                         : modelStatus === 'error' ? '● load failed — using server' : '● …')
+                      : ''}
+                  </span>
+                </p>
+                <div className="flex bg-gray-100 dark:bg-gray-900 rounded-xl p-1 gap-1">
+                  <button
+                    onClick={() => setEngineMode('local')}
+                    disabled={isActive}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                      engineMode === 'local'
+                        ? 'bg-white dark:bg-gray-700 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-800'
+                    }`}
+                    title="Run YOLO in the browser — instant overlay, no network round-trip"
+                  >
+                    <Zap className="w-3.5 h-3.5" /> On-Device
+                  </button>
+                  <button
+                    onClick={() => setEngineMode('server')}
+                    disabled={isActive}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                      engineMode === 'server'
+                        ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-800'
+                    }`}
+                    title="Send each frame to the server for detection"
+                  >
+                    <Server className="w-3.5 h-3.5" /> Server
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Confidence Threshold */}
             {detectionMode === 'yolo' && (

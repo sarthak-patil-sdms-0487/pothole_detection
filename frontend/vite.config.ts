@@ -136,6 +136,11 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src')
     }
   },
+  optimizeDeps: {
+    // onnxruntime-web ships wasm + workers that Vite's dep pre-bundler mangles;
+    // excluding it lets the runtime resolve its own assets from /ort/.
+    exclude: ['onnxruntime-web'],
+  },
   server: {
     port: 5173,
     host: true,

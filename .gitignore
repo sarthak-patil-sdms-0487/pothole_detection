@@ -43,3 +43,6 @@ uploads/
 
 # Local run logs
 logs/
+frontend/public/pothole-yolo.onnx
+frontend/public/ort/
+backend/src/models/best.onnx
