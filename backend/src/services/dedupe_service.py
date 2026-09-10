@@ -12,7 +12,16 @@ logger = logging.getLogger(__name__)
 
 # Sightings within this distance of an existing open defect are treated as
 # repeat observations of that same defect rather than a new one.
-DEDUPE_RADIUS_M = 15.0
+#
+# This is a moving-camera CORRIDOR radius, not a stationary geofence: a sighting's
+# GPS is the vehicle's position, not the pothole's, so one pothole seen across a
+# few frames of a drive-by lands as a short chain of points ~12-15m apart. A 40m
+# radius lets that chain merge into a single defect (each frame is within 40m of
+# the previous), instead of splitting into several when per-frame movement tips
+# just over a tight threshold. Distinct potholes more than ~40m apart still form
+# separate defects. Override with DEDUPE_RADIUS_M in the environment if needed.
+import os
+DEDUPE_RADIUS_M = float(os.getenv("DEDUPE_RADIUS_M", "40.0"))
 
 def haversine_distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculates great-circle distance between two points in meters using Haversine formula."""

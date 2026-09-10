@@ -664,7 +664,20 @@ const EngineerReview: React.FC = () => {
 
                   <div className="text-xs text-gray-600 dark:text-gray-300 space-y-1 font-mono">
                     <p><span className="font-semibold text-gray-400">Road Corridor:</span> {selectedDefect.segment_name || 'Segment #' + selectedDefect.segment_id}</p>
-                    <p><span className="font-semibold text-gray-400">Policy Score:</span> {selectedDefect.policy_score || 'N/A'} (Threshold: 2.50)</p>
+                    {latestSighting?.lat != null && latestSighting?.lng != null && (
+                      <p className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-400">Location:</span>
+                        <span>{latestSighting.lat.toFixed(5)}, {latestSighting.lng.toFixed(5)}</span>
+                        <a
+                          href={`https://www.google.com/maps?q=${latestSighting.lat},${latestSighting.lng}`}
+                          target="_blank" rel="noreferrer"
+                          className="inline-flex items-center gap-0.5 text-blue-600 hover:underline not-italic font-sans"
+                        >
+                          <MapPin className="w-3 h-3" /> Map
+                        </a>
+                      </p>
+                    )}
+                    <p><span className="font-semibold text-gray-400">Policy Score:</span> {selectedDefect.policy_score ?? 'N/A'}</p>
                     <p><span className="font-semibold text-gray-400">Lifecycle Intake:</span> {selectedDefect.promotion_reason || 'Field Intake'}</p>
                   </div>
 
