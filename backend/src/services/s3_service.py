@@ -116,13 +116,22 @@ def upload_file_obj_to_s3(file_obj: BytesIO, object_name: str) -> str:
             ExtraArgs={'ContentType': 'image/jpeg'}
         )
 
-        # Construct the public URL. S3_PUBLIC_URL lets the browser-facing host
-        # differ from the internal endpoint the API talks to (e.g. inside Docker).
-        base = settings.s3_public_url or settings.s3_endpoint_url
-        if base:
-            public_url = f"{base.rstrip('/')}/{settings.s3_bucket_name}/{object_name}"
+        # Construct the browser-facing URL.
+        #  - "relative": emit a same-origin path (/bucket/object). The frontend
+        #    proxies this to MinIO, so the image loads from whatever host is
+        #    serving the page — laptop on localhost AND phone over ngrok — with
+        #    no absolute host baked into the DB. This is the robust default.
+        #  - an explicit host (e.g. https://x.ngrok-free.dev): use it verbatim.
+        #  - otherwise fall back to the internal endpoint, then real AWS S3.
+        public = settings.s3_public_url
+        if public == "relative":
+            public_url = f"/{settings.s3_bucket_name}/{object_name}"
         else:
-            public_url = f"https://{settings.s3_bucket_name}.s3.amazonaws.com/{object_name}"
+            base = public or settings.s3_endpoint_url
+            if base:
+                public_url = f"{base.rstrip('/')}/{settings.s3_bucket_name}/{object_name}"
+            else:
+                public_url = f"https://{settings.s3_bucket_name}.s3.amazonaws.com/{object_name}"
 
         logger.info(f"Successfully uploaded in-memory object to {public_url}")
         return public_url
